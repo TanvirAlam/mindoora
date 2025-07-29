@@ -5,10 +5,11 @@ import LoginScreen from './src/screens/auth/LoginScreen';
 import HomeScreen from './src/screens/home/HomeScreen';
 import JoinGameScreen from './src/screens/game/JoinGameScreen';
 import CreateGameScreen from './src/screens/game/CreateGameScreen';
+import UserProfileScreen from './src/screens/profile/UserProfileScreen';
 import authService from './src/services/auth/authService';
 import { User } from './src/types';
 
-type Screen = 'login' | 'home' | 'joinGame' | 'createGame';
+type Screen = 'login' | 'home' | 'joinGame' | 'createGame' | 'userProfile';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -62,6 +63,7 @@ export default function App() {
             onLogout={() => setUser(null)}
             onNavigateToJoinGame={() => setCurrentScreen('joinGame')}
             onNavigateToCreateGame={() => setCurrentScreen('createGame')}
+            onNavigateToUserProfile={() => setCurrentScreen('userProfile')}
           />
         );
       case 'joinGame':
@@ -78,12 +80,19 @@ export default function App() {
             onGameCreated={handleGameCreated}
           />
         );
+      case 'userProfile':
+        return (
+          <UserProfileScreen 
+            onBack={() => setCurrentScreen('home')}
+          />
+        );
       default:
         return (
           <HomeScreen 
             onLogout={() => setUser(null)}
             onNavigateToJoinGame={() => setCurrentScreen('joinGame')}
             onNavigateToCreateGame={() => setCurrentScreen('createGame')}
+            onNavigateToUserProfile={() => setCurrentScreen('userProfile')}
           />
         );
     }
