@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { prisma } from '../../utils/PrismaInstance'
+import { pool } from '../../utils/PrismaInstance'
 
 export const imageUploadController = async (req: Request, res: Response) => {
   try {
@@ -24,12 +24,11 @@ export const imageUploadController = async (req: Request, res: Response) => {
 
     const imgName = req.file.filename
 
-    const imageDetails = await prisma.images.create({
-      data: {
-        imgName,
-        user
-      }
-    })
+    const imageDetailsResult = await pool.query(
+      'INSERT INTO images ("imgName", "user") VALUES ($1, $2) RETURNING *',
+      [imgName, user]
+    )
+    const imageDetails = imageDetailsResult.rows[0]
 
     return res.status(201).json({
       message: 'File uploaded successfully',

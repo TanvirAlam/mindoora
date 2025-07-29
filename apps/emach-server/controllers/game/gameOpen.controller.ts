@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { prisma } from '../../utils/PrismaInstance'
+import { pool } from '../../utils/PrismaInstance'
 import { missingParams } from '../tools'
 
 
@@ -10,54 +10,49 @@ export const getOnePublicGameController = async (req: Request, res: Response) =>
     if(missingParams({id}, res)) return;
 
 
-    const oneGame = await prisma.userGame.findUnique({
-      where: { id }
-    }
-    )
+    const { rows: gameRows } = await pool.query(
+      'SELECT * FROM userGame WHERE id = $1',
+      [id]
+    );
+    const oneGame = gameRows[0];
 
     if(oneGame === null) return res.status(400).json({ message: 'Not Found Game'});
 
 
-    const gameCreator = await prisma.user.findUnique({
-      where: {registerId: oneGame?.user},
-      select: {id: true, name: true, image: true}
-    })
+    const { rows: creatorRows } = await pool.query(
+      'SELECT id, name, image FROM "user" WHERE registerId = $1',
+      [oneGame?.user]
+    );
+    const gameCreator = creatorRows[0];
 
 
-    const gameDetails = await prisma.userGameDetails.findFirst({
-      where: {gameId: oneGame?.id},
-      select: {
-        imgUrl: true,
-        description: true,
-        category: true,
-        theme: true,
-        keyWords: true
-      }
-    })
+    const { rows: detailsRows } = await pool.query(
+      'SELECT imgUrl, description, category, theme, keyWords FROM userGameDetails WHERE gameId = $1',
+      [oneGame?.id]
+    );
+    const gameDetails = detailsRows[0];
 
-    const nQuestions = await prisma.questions.count({
-      where: {gameId: oneGame?.id},
-    })
+    const { rows: questionCountRows } = await pool.query(
+      'SELECT COUNT(*) as count FROM questions WHERE gameId = $1',
+      [oneGame?.id]
+    );
+    const nQuestions = parseInt(questionCountRows[0].count);
 
-    const gameScores = await prisma.userGameScore.findMany({
-      where: {gameId: oneGame?.id},
-      select: {score: true}
-    })
+    const { rows: gameScores } = await pool.query(
+      'SELECT score FROM userGameScore WHERE gameId = $1',
+      [oneGame?.id]
+    );
 
     const averageScore = gameScores.length > 0 ? gameScores.reduce((acc, gs)=> acc + gs.score, 0)/gameScores.length : 0;
 
-    const gameRooms = await prisma.gameRooms.findMany({
-      where: {gameId: oneGame?.id},
-      include: {
-        _count: {
-          select: { gamePlayers: true }
-        }
-       }
-    })
+    const { rows: gameRooms } = await pool.query(
+      'SELECT gr.*, COUNT(gp.id) as player_count FROM gameRooms gr LEFT JOIN gamePlayers gp ON gr.id = gp.gameRoomId WHERE gr.gameId = $1 GROUP BY gr.id',
+      [oneGame?.id]
+    );
 
     const nGameRooms = gameRooms.length
 
-    const totalPlayers = gameRooms.reduce((acc, gr)=> acc + gr._count.gamePlayers, 0);
+    const totalPlayers = gameRooms.reduce((acc: number, gr: any) => acc + parseInt(gr.player_count), 0);
 
 
     const gameAllDetails = {

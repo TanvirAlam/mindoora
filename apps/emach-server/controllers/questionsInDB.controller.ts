@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { prisma } from '../utils/PrismaInstance'
+import { pool } from '../utils/PrismaInstance'
 import { questionsInDbSchema, questionsInDbType } from '../schema/questionsInDB.schema'
 import { findDuplicateContinue } from './tools'
 
@@ -13,18 +13,10 @@ export const saveQuestionsInDbController = async (req: Request<{}, {}, questions
 
       if(await findDuplicateContinue('questionDB', {question: q.question}, res))continue;
 
-      await prisma.questionDB.create({
-        data: {
-          type: q.type,
-          question: q.question,
-          difficulty: q.difficulty,
-          category: q.category,
-          correct_answer: q.correct_answer,
-          incorrect_answers: q.incorrect_answers,
-          extra_incorrect_answers: q.extra_incorrect_answers,
-          user: user
-        }
-      });
+      await pool.query(
+        'INSERT INTO "questionDB" (type, question, difficulty, category, correct_answer, incorrect_answers, extra_incorrect_answers, "user") VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [q.type, q.question, q.difficulty, q.category, q.correct_answer, q.incorrect_answers, q.extra_incorrect_answers, user]
+      );
     }
 
     return res.status(201).json({ message: 'Questions Saved Successfully' })

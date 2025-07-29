@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { prisma } from '../utils/PrismaInstance'
+import { pool } from '../utils/PrismaInstance'
 import { missingParams } from './tools'
 
 export const getAllNotificationsController = async (req: Request, res: Response) => {
@@ -8,32 +8,31 @@ export const getAllNotificationsController = async (req: Request, res: Response)
     if(missingParams({lastNotification}, res)) return;
     const lastNotificationNumber = parseInt(lastNotification);
 
-    const allNotifications = await prisma.notifications.findMany({
-      where: {
-        recipients: {
-          some: {
-            recipientId: res.locals.user.id
-          }
-        }
-      },
-      select: {
-        from: true,
-        notification: true,
-      },
-      skip: lastNotificationNumber,
-      take: 25
-    })
+    // Get notifications for this user
+    const allNotificationsResult = await pool.query(
+      `SELECT n."from", n.notification 
+       FROM notifications n 
+       JOIN "NotificationRecipient" nr ON n.id = nr."notificationId" 
+       WHERE nr."recipientId" = $1 
+       OFFSET $2 LIMIT 25`,
+      [res.locals.user.id, lastNotificationNumber]
+    )
+    const allNotifications = allNotificationsResult.rows
 
-    if (!allNotifications) {
+    if (!allNotifications || allNotifications.length === 0) {
       return res.status(404).json({ message: 'Notifications Not Found' })
     }
 
     let allNotificationsWithName = []
 
     for (let i = 0; i < allNotifications.length; i++) {
-      const fromUser = await prisma.user.findUnique({
-        where: { id: allNotifications[i].from }
-      });
+      // Get user name for each notification
+      const fromUserResult = await pool.query(
+        'SELECT name FROM "user" WHERE id = $1',
+        [allNotifications[i].from]
+      )
+      const fromUser = fromUserResult.rows[0]
+      
       if (fromUser) {
         allNotificationsWithName.push({
           ...allNotifications[i],

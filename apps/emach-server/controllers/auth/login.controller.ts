@@ -1,10 +1,8 @@
 import { Request, Response } from 'express'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
-import { PrismaClient } from '@prisma/client'
+import { pool } from '../../utils/PrismaInstance'
 import {loginType,loginSchema} from '../../schema/auth/login.schema'
-
-const prisma = new PrismaClient()
 
 export const loginController = async (req: Request<{},{},loginType>, res: Response) => {
   try {
@@ -15,7 +13,13 @@ export const loginController = async (req: Request<{},{},loginType>, res: Respon
       return res.status(400).json({ message: 'Required data not found' })
     }
 
-    const existingUser = await prisma.register.findUnique({ where: { email } })
+    // Find user by email
+    const existingUserResult = await pool.query(
+      'SELECT * FROM "Register" WHERE email = $1',
+      [email]
+    )
+    const existingUser = existingUserResult.rows[0]
+    
     if (!existingUser) {
       return res.status(401).json({ message: 'User is not found' })
     }
@@ -29,9 +33,12 @@ export const loginController = async (req: Request<{},{},loginType>, res: Respon
       return res.status(401).json({ message: 'Password is not match' })
     }
 
-    const user = await prisma.user.findUnique({
-      where: { registerId: existingUser.id }
-    })
+    // Find user profile
+    const userResult = await pool.query(
+      'SELECT * FROM "User" WHERE "registerId" = $1',
+      [existingUser.id]
+    )
+    const user = userResult.rows[0]
 
     const token = jwt.sign(
       { email: existingUser.email },
@@ -39,14 +46,17 @@ export const loginController = async (req: Request<{},{},loginType>, res: Respon
       { expiresIn: '86400s' }
     )
 
-    await prisma.register.update({
-      where: { id: existingUser.id },
-      data: { accessToken: token }
-    })
+    // Update access token
+    await pool.query(
+      'UPDATE "Register" SET "accessToken" = $1 WHERE id = $2',
+      [token, existingUser.id]
+    )
 
-    await prisma.loginHistory.create({
-      data: { userId: existingUser.id }
-    })
+    // Create login history entry
+    await pool.query(
+      'INSERT INTO "LoginHistory" ("userId", "loginTime") VALUES ($1, NOW())',
+      [existingUser.id]
+    )
 
     return res.status(200).json({ message: 'Login successful', ...existingUser, ...user, accessToken: token })
   } catch (error) {

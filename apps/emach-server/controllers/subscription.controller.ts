@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { prisma } from '../utils/PrismaInstance'
+import { pool } from '../utils/PrismaInstance'
 import { createSubscriptionType, createSucscriptionSchema } from '../schema/auth/subscription.schema'
 import { findDuplicate } from './tools'
 
@@ -11,13 +11,10 @@ export const createSubscriptionController = async (req: Request<{}, {}, createSu
 
     if(await findDuplicate('subscription', { email }, res))return;
 
-    await prisma.subscription.create({
-      data: {
-        email,
-        ipAdress,
-        isActive: true
-      }
-    })
+    await pool.query(
+      'INSERT INTO subscription (email, "ipAdress", "isActive") VALUES ($1, $2, $3)',
+      [email, ipAdress, true]
+    )
 
     return res.status(201).json({ message: 'Subscription Added successfully' })
   } catch (error) {

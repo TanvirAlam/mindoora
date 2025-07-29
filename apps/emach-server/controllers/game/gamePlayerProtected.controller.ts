@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { prisma } from '../../utils/PrismaInstance'
+import { pool } from '../../utils/PrismaInstance'
 import { missingParams, userAccess } from '../tools';
 import { updateGamePlayerStatusType, updateGamePlayerStatusSchema, updateConfirmAllGamePlayerType, updateConfirmAllGamePlayerSchema } from '../../schema/game/gamePlayers.schema';
 
@@ -13,9 +13,10 @@ export const deleteGamePlayerController = async (req: Request, res: Response) =>
       }
     }, res) === null) return;
 
-    await prisma.gamePlayers.delete({
-      where: { id },
-    })
+    await pool.query(
+      'DELETE FROM "gamePlayers" WHERE id = $1',
+      [id]
+    )
     return res.status(204).json({ message: 'Game Player deleted successfully' })
   } catch (error) {
     return res.status(500).json(error)
@@ -28,9 +29,11 @@ export const getAllPlayersOfARoomController = async (req: Request, res: Response
     if (missingParams({ roomId }, res)) return;
     if (await userAccess('gameRooms', { id: roomId }, res) === null) return;
 
-    const allPlayers = await prisma.gamePlayers.findMany({
-      where: { roomId }
-    })
+    const allPlayersResult = await pool.query(
+      'SELECT * FROM "gamePlayers" WHERE "roomId" = $1',
+      [roomId]
+    )
+    const allPlayers = allPlayersResult.rows
 
     return res.status(201).json({ message: 'Got all Players successfully', result: { allPlayers } })
   } catch (error) {
@@ -51,22 +54,23 @@ export const updateGamePlayerStatusController = async (
       }
     }, res) === null) return;
 
-    const updatedPlayer = await prisma.gamePlayers.update({
-      where: { id },
-      data: {
-        isApproved
-      }
-    })
+    const updatedPlayerResult = await pool.query(
+      'UPDATE "gamePlayers" SET "isApproved" = $1 WHERE id = $2 RETURNING *',
+      [isApproved, id]
+    )
+    const updatedPlayer = updatedPlayerResult.rows[0]
 
-    const allPlayer = await prisma.gamePlayers.findMany({
-      where: {
-        roomId: updatedPlayer.roomId
-      }
-    })
+    const allPlayerResult = await pool.query(
+      'SELECT * FROM "gamePlayers" WHERE "roomId" = $1',
+      [updatedPlayer.roomId]
+    )
+    const allPlayer = allPlayerResult.rows
 
-    const roomStatus = await prisma.gameRooms.findUnique({
-      where: { id: updatedPlayer.roomId }
-    })
+    const roomStatusResult = await pool.query(
+      'SELECT * FROM "gameRooms" WHERE id = $1',
+      [updatedPlayer.roomId]
+    )
+    const roomStatus = roomStatusResult.rows[0]
 
     req.io.to(roomStatus.id).emit('players_response', allPlayer)
     req.io.to(roomStatus.id).emit('game_status', { id: roomStatus.id, status: roomStatus.status })
@@ -92,20 +96,16 @@ export const updateConfirmAllGamePlayerController = async (
       gt: currentDate
     } }, res) === null) return;
 
-    await prisma.gamePlayers.updateMany({
-      where: {
-        roomId
-      },
-      data: {
-        isApproved: true
-      }
-    });
+    await pool.query(
+      'UPDATE "gamePlayers" SET "isApproved" = true WHERE "roomId" = $1',
+      [roomId]
+    )
 
-    const allPlayer = await prisma.gamePlayers.findMany({
-      where: {
-        roomId: roomId
-      }
-    })
+    const allPlayerResult = await pool.query(
+      'SELECT * FROM "gamePlayers" WHERE "roomId" = $1',
+      [roomId]
+    )
+    const allPlayer = allPlayerResult.rows
 
     req.io.to(roomId).emit('players_response', allPlayer)
 

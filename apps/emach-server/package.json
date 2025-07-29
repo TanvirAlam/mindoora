@@ -11,10 +11,10 @@
   "scripts": {
     "test": "jest --coverage",
     "test-exp": "jest --coverage node_modules/jest/bin/jest.js",
-    "dev": "NODE_ENV=development ts-node-dev -r tsconfig-paths/register src/index.ts --max-old-space-size=4096",
+    "dev": "NODE_ENV=development ts-node-dev -r tsconfig-paths/register index.ts --max-old-space-size=4096",
     "build": "tsc -p . -outDir ./dist",
     "prestart": "npm run build",
-    "start": "NODE_ENV=production ts-node-dev -r tsconfig-paths/register src/index.ts --max-old-space-size=4096",
+    "start": "NODE_ENV=production ts-node-dev -r tsconfig-paths/register index.ts --max-old-space-size=4096",
     "generate": "drizzle-kit generate",
     "migrate": "DB_MAX_CONNECTIONS=1 tsx db/migrate.ts",
     "reset": "DB_MAX_CONNECTIONS=1 tsx db/reset.ts",
@@ -70,6 +70,8 @@
     "nodemon": "^2.0.22",
     "nyc": "^15.1.0",
     "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "tsconfig-paths": "^4.2.0",
     "tsx": "^4.20.3",
     "typescript": "^5.5.4"
   }

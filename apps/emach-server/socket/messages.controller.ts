@@ -1,4 +1,4 @@
-import { prisma } from '../utils/PrismaInstance';
+import { pool } from '../utils/PrismaInstance';
 import { createMessagesSchema, createMessagesType } from '../schema/game/messages.schema';
 
 export const createMessagesController = async (data: createMessagesType, io: any) => {
@@ -7,9 +7,11 @@ export const createMessagesController = async (data: createMessagesType, io: any
     const validatedData = createMessagesSchema.parse(data);
     const { roomId } = validatedData;
 
-    const isLiveRoom = await prisma.gameRooms.findFirst({
-      where: { id: roomId, status: { in: ['live', 'created'] } },
-    });
+    const { rows } = await pool.query(
+      'SELECT id FROM gameRooms WHERE id = $1 AND status IN ($2, $3)',
+      [roomId, 'live', 'created']
+    );
+    const isLiveRoom = rows[0];
 
     if (!isLiveRoom) {
       return;
