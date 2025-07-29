@@ -6,10 +6,11 @@ import HomeScreen from './src/screens/home/HomeScreen';
 import JoinGameScreen from './src/screens/game/JoinGameScreen';
 import CreateGameScreen from './src/screens/game/CreateGameScreen';
 import UserProfileScreen from './src/screens/profile/UserProfileScreen';
+import SettingsScreen from './src/screens/settings/SettingsScreen';
 import authService from './src/services/auth/authService';
 import { User } from './src/types';
 
-type Screen = 'login' | 'home' | 'joinGame' | 'createGame' | 'userProfile';
+type Screen = 'login' | 'home' | 'joinGame' | 'createGame' | 'userProfile' | 'settings';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -64,6 +65,7 @@ export default function App() {
             onNavigateToJoinGame={() => setCurrentScreen('joinGame')}
             onNavigateToCreateGame={() => setCurrentScreen('createGame')}
             onNavigateToUserProfile={() => setCurrentScreen('userProfile')}
+            onNavigateToSettings={() => setCurrentScreen('settings')}
           />
         );
       case 'joinGame':
@@ -86,6 +88,12 @@ export default function App() {
             onBack={() => setCurrentScreen('home')}
           />
         );
+      case 'settings':
+        return (
+          <SettingsScreen 
+            onBack={() => setCurrentScreen('home')}
+          />
+        );
       default:
         return (
           <HomeScreen 
@@ -93,6 +101,7 @@ export default function App() {
             onNavigateToJoinGame={() => setCurrentScreen('joinGame')}
             onNavigateToCreateGame={() => setCurrentScreen('createGame')}
             onNavigateToUserProfile={() => setCurrentScreen('userProfile')}
+            onNavigateToSettings={() => setCurrentScreen('settings')}
           />
         );
     }
