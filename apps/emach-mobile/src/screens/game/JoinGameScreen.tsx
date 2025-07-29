@@ -91,7 +91,7 @@ const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) =
         
         <View style={styles.headerCenter}>
           <Image 
-            source={require('../../../assets/mindoora-short.png')} 
+            source={require('../../../assets/mindoora.png')} 
             style={styles.headerLogo}
             resizeMode="contain"
           />
@@ -104,7 +104,13 @@ const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) =
       <View style={styles.content}>
         {/* Title Section */}
         <View style={styles.titleSection}>
-          <Text style={styles.gameIcon}>🚀</Text>
+          <Text style={styles.gameIcon}>
+            <Image 
+              source={require('../../../assets/mindoora-short.png')} 
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
+          </Text>
           <Text style={styles.title}>Join Game</Text>
           <Text style={styles.subtitle}>Enter the 6-digit game code to join</Text>
         </View>

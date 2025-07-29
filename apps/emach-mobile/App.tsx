@@ -4,10 +4,11 @@ import { StatusBar } from 'expo-status-bar';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import HomeScreen from './src/screens/home/HomeScreen';
 import JoinGameScreen from './src/screens/game/JoinGameScreen';
+import CreateGameScreen from './src/screens/game/CreateGameScreen';
 import authService from './src/services/auth/authService';
 import { User } from './src/types';
 
-type Screen = 'login' | 'home' | 'joinGame';
+type Screen = 'login' | 'home' | 'joinGame' | 'createGame';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -42,6 +43,13 @@ export default function App() {
     setCurrentScreen('home');
   };
 
+  const handleGameCreated = (gameData: any) => {
+    console.log('Game created:', gameData);
+    // Here you can add logic to handle the created game
+    // For now, just go back to home
+    setCurrentScreen('home');
+  };
+
   const renderScreen = () => {
     if (!user) {
       return <LoginScreen onLoginSuccess={() => {}} />;
@@ -53,6 +61,7 @@ export default function App() {
           <HomeScreen 
             onLogout={() => setUser(null)}
             onNavigateToJoinGame={() => setCurrentScreen('joinGame')}
+            onNavigateToCreateGame={() => setCurrentScreen('createGame')}
           />
         );
       case 'joinGame':
@@ -62,11 +71,19 @@ export default function App() {
             onJoinGame={handleJoinGame}
           />
         );
+      case 'createGame':
+        return (
+          <CreateGameScreen 
+            onBack={() => setCurrentScreen('home')}
+            onGameCreated={handleGameCreated}
+          />
+        );
       default:
         return (
           <HomeScreen 
             onLogout={() => setUser(null)}
             onNavigateToJoinGame={() => setCurrentScreen('joinGame')}
+            onNavigateToCreateGame={() => setCurrentScreen('createGame')}
           />
         );
     }

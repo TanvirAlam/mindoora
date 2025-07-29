@@ -14,9 +14,10 @@ import authService from '../../services/auth/authService';
 interface HomeScreenProps {
   onLogout: () => void;
   onNavigateToJoinGame?: () => void;
+  onNavigateToCreateGame?: () => void;
 }
 
-const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout, onNavigateToJoinGame }) => {
+const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout, onNavigateToJoinGame, onNavigateToCreateGame }) => {
   const user = authService.getCurrentUser();
 
   const handleLogout = async () => {
@@ -67,7 +68,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout, onNavigateToJoinGame 
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image 
-            source={require('../../../assets/mindoora-short.png')} 
+            source={require('../../../assets/mindoora.png')} 
             style={styles.headerLogo}
             resizeMode="contain"
           />
@@ -96,6 +97,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout, onNavigateToJoinGame 
                 // Handle navigation to different screens
                 if (option.title === 'Join Game' && onNavigateToJoinGame) {
                   onNavigateToJoinGame();
+                } else if (option.title === 'Create Game' && onNavigateToCreateGame) {
+                  onNavigateToCreateGame();
                 } else {
                   console.log(`Navigate to ${option.title}`);
                 }
