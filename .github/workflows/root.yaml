@@ -1,4 +1,4 @@
-name: emach-turborepo-CI
+name: mindoora-turborepo-CI
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      NEXTAUTH_SECRET: 'emach-mindoora'
+      NEXTAUTH_SECRET: 'mindoora-web'
       NEXTAUTH_URL: 'http://localhost:3000'
       DISCORD_CLIENT_ID: ''
       DISCORD_CLIENT_SECRET: ''
@@ -43,7 +43,7 @@ jobs:
         run: pnpm run test
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-          TURBO_TEAM: emach
+          TURBO_TEAM: mindoora
           TURBO_REMOTE_ONLY: 'true'
           DATABASE_URL: "postgres://mindoora:Cscp9UXmHRUCYIrpCEexFSFAY0v4Yrb4@dpg-clp1a5946foc73a5nk9g-a.oregon-postgres.render.com/mindoora"
           NEXT_PUBLIC_TEST_EMAIL: "Rafbabu897@gmail.com"

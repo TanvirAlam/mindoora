@@ -30,7 +30,7 @@
     "turbo": "^1.10.12"
   },
   "packageManager": "pnpm@10.13.1",
-  "name": "emach-turborepo",
+  "name": "mindoora-turborepo",
   "config": {
     "commitizen": {
       "path": "./node_modules/cz-conventional-changelog"
