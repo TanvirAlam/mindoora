@@ -74,8 +74,41 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }: { token: any; user: any}) {
-      if (user && (user.id || user.name)) {
+    async jwt({ token, user, account }: { token: any; user: any; account: any}) {
+      if (user && account && account.provider !== 'credentials') {
+        // Handle OAuth providers (Google, Facebook, etc.) - use OAuth endpoint with login history
+        const provider = account.provider;
+        const providerId = account.providerAccountId || user.id;
+        
+        console.log('🔄 NextAuth JWT callback - OAuth login attempt');
+        console.log('🏷️ Provider:', provider);
+        console.log('👤 User data:', { name: user.name, email: user.email });
+        
+        await postMethod(endPoints.auth.oauthLogin, {
+          name: user.name || "Not found",
+          email: user.email,
+          image: user.image || 'https://via.placeholder.com/150',
+          provider: provider,
+          providerId: providerId,
+          verified: true
+        })
+          .then((res) => {
+            console.log('✅ OAuth login successful');
+            const data: User = res.data;
+            token.id = data.id;
+            token.email = data.email;
+            token.name = data.name;
+            token.userType = data.registerId;
+            token.image = data.image;
+            token.accessToken = data.accessToken;
+            token.verified = data.verified;
+          })
+          .catch((error) => {
+            console.error('❌ OAuth login failed:', error.response?.data || error.message);
+            token.error = error.response?.data?.message || 'OAuth login failed';
+          });
+      } else if (user && (user.id || user.name)) {
+        // Handle credentials provider - use existing logic
         await postMethod(endPoints.auth.register, {
           name: user.name || "Not found",
           email: user.email,

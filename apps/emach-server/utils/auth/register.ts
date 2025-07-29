@@ -1,11 +1,15 @@
-import { prisma } from '../PrismaInstance'
+import { pool } from '../PrismaInstance'
 import jwt from 'jsonwebtoken'
 
 export const createUser = async (userData: any) => {
   const { name = 'Not found', image = 'Not found', registerId } = userData
-  return await prisma.user.create({
-    data: { name, image, registerId }
-  })
+  
+  const result = await pool.query(
+    'INSERT INTO "User" (name, image, "registerId") VALUES ($1, $2, $3) RETURNING *',
+    [name, image, registerId]
+  )
+  
+  return result.rows[0]
 }
 
 export const createAccessToken = async (register: any) => {
@@ -17,10 +21,10 @@ export const createAccessToken = async (register: any) => {
     { expiresIn: '1h' }
   )
 
-  await prisma.register.update({
-    where: { id: register.id },
-    data: { accessToken: token }
-  })
+  await pool.query(
+    'UPDATE "Register" SET "accessToken" = $1 WHERE id = $2',
+    [token, register.id]
+  )
 
   return token
 }

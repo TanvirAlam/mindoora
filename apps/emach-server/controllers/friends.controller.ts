@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { prisma } from '../utils/PrismaInstance'
+import { pool } from '../utils/PrismaInstance'
 import { findDuplicate, missingParams, userAccess } from './tools'
 import {
   sendRequestSchema,
@@ -17,34 +17,41 @@ export const sendRequestController = async (req: Request<{}, {}, sendRequestType
     if(await findDuplicate('friends', { userId: user, friendId }, res))return;
     if(await findDuplicate('friends', { userId: friendId, friendId: user }, res))return;
 
-    const checkFriendId = await prisma.register.findUnique({
-      where: {id: friendId}
-    })
+    // Check if friend exists
+    const checkFriendIdResult = await pool.query(
+      'SELECT * FROM register WHERE id = $1',
+      [friendId]
+    )
+    const checkFriendId = checkFriendIdResult.rows[0]
 
     if (!checkFriendId){
       return res.status(404).json({message: 'Friend Id Not Found'})
     }
 
-    const userName = (await prisma.user.findUnique({ where: { registerId: user }})).name
+    // Get user name
+    const userResult = await pool.query(
+      'SELECT name FROM "user" WHERE "registerId" = $1',
+      [user]
+    )
+    const userName = userResult.rows[0].name
 
-    await prisma.friends.create({
-      data: {
-        userId: user,
-        friendId
-      }
-    })
+    // Create friend request
+    await pool.query(
+      'INSERT INTO friends ("userId", "friendId") VALUES ($1, $2)',
+      [user, friendId]
+    )
 
-    await prisma.notifications.create({
-      data: {
-        from: user,
-        notification: `${userName} wants to be a friend of you.`,
-        recipients: {
-          create: {
-            recipientId: checkFriendId.id
-          }
-        }
-      }
-    })
+    // Create notification
+    const notificationResult = await pool.query(
+      'INSERT INTO notifications ("from", notification) VALUES ($1, $2) RETURNING id',
+      [user, `${userName} wants to be a friend of you.`]
+    )
+    const notificationId = notificationResult.rows[0].id
+
+    await pool.query(
+      'INSERT INTO "NotificationRecipient" ("notificationId", "recipientId") VALUES ($1, $2)',
+      [notificationId, checkFriendId.id]
+    )
 
     return res.status(201).json({ message: 'Friend Request Send Successfully' })
   } catch (error) {
@@ -59,17 +66,21 @@ export const deleteFriendController = async (req: Request, res: Response) => {
 
     if(missingParams({friendId}, res)) return;
 
-    const checkFriend = await prisma.friends.findFirst({
-      where: {OR: [{userId: user, friendId}, {userId: friendId, friendId: user}]}
-    })
+    // Find friend relationship
+    const checkFriendResult = await pool.query(
+      'SELECT * FROM friends WHERE ("userId" = $1 AND "friendId" = $2) OR ("userId" = $2 AND "friendId" = $1) LIMIT 1',
+      [user, friendId]
+    )
+    const checkFriend = checkFriendResult.rows[0]
 
     if (!checkFriend){
       return res.status(404).json({message: 'Friend Id Not Found'})
     }
 
-    await prisma.friends.delete({
-      where: {id: checkFriend.id}
-    })
+    await pool.query(
+      'DELETE FROM friends WHERE id = $1',
+      [checkFriend.id]
+    )
 
     return res.status(204).json({ message: 'Friend Request deleted successfully'})
   } catch (error) {
@@ -83,20 +94,21 @@ export const acceptRequestController = async (req: Request<{}, {}, acceptRejectR
     acceptRejectRequestSchema.parse(req.body)
     const user = res.locals.user.id
 
-    const checkRequest = await prisma.friends.findFirst({
-      where: {userId, friendId: user, status: 'REQUESTED'}
-    })
+    // Find pending friend request
+    const checkRequestResult = await pool.query(
+      'SELECT * FROM friends WHERE "userId" = $1 AND "friendId" = $2 AND status = $3 LIMIT 1',
+      [userId, user, 'REQUESTED']
+    )
+    const checkRequest = checkRequestResult.rows[0]
 
     if (!checkRequest){
       return res.status(404).json({message: 'Friend Request Not Found'})
     }
 
-    await prisma.friends.update({
-      where: { id: checkRequest.id },
-      data: {
-        status: 'ACCEPTED'
-      }
-    })
+    await pool.query(
+      'UPDATE friends SET status = $1 WHERE id = $2',
+      ['ACCEPTED', checkRequest.id]
+    )
 
     return res.status(201).json({ message: 'Friend Request Accepted Successfully' })
   } catch (error) {
@@ -110,20 +122,21 @@ export const rejectRequestController = async (req: Request<{}, {}, acceptRejectR
     acceptRejectRequestSchema.parse(req.body)
     const user = res.locals.user.id
 
-    const checkRequest = await prisma.friends.findFirst({
-      where: {userId, friendId: user, status: 'REQUESTED'}
-    })
+    // Find pending friend request
+    const checkRequestResult = await pool.query(
+      'SELECT * FROM friends WHERE "userId" = $1 AND "friendId" = $2 AND status = $3 LIMIT 1',
+      [userId, user, 'REQUESTED']
+    )
+    const checkRequest = checkRequestResult.rows[0]
 
     if (!checkRequest){
       return res.status(404).json({message: 'Friend Request Not Found'})
     }
 
-    await prisma.friends.update({
-      where: { id: checkRequest.id },
-      data: {
-        status: 'REJECTED'
-      }
-    })
+    await pool.query(
+      'UPDATE friends SET status = $1 WHERE id = $2',
+      ['REJECTED', checkRequest.id]
+    )
 
     return res.status(201).json({ message: 'Friend Request Rejected Successfully' })
   } catch (error) {
@@ -140,9 +153,12 @@ export const friendStatusController = async (req: Request, res: Response) => {
       return res.status(201).json({message: 'It is me', result: {status: 'ITSME'}})
     }
 
-    const checkFriend = await prisma.friends.findFirst({
-      where: {OR: [{userId: user, friendId}, {userId: friendId, friendId: user}]}
-    })
+    // Check friend relationship
+    const checkFriendResult = await pool.query(
+      'SELECT * FROM friends WHERE ("userId" = $1 AND "friendId" = $2) OR ("userId" = $2 AND "friendId" = $1) LIMIT 1',
+      [user, friendId]
+    )
+    const checkFriend = checkFriendResult.rows[0]
 
     if (!checkFriend){
       return res.status(404).json({message: 'Friend Id Not Found'})
@@ -160,19 +176,12 @@ export const friendListController = async (req: Request, res: Response) => {
   try {
     const user = res.locals.user.id
 
-    const friendList = await prisma.friends.findMany({
-      where: {
-        AND: [
-          {
-            OR: [
-              { userId: user },
-              { friendId: user },
-            ]
-          },
-          { status: 'ACCEPTED' }
-        ]
-      }
-    });
+    // Get accepted friends
+    const friendListResult = await pool.query(
+      'SELECT * FROM friends WHERE (("userId" = $1) OR ("friendId" = $1)) AND status = $2',
+      [user, 'ACCEPTED']
+    )
+    const friendList = friendListResult.rows
 
     return res.status(200).json({ message: 'Got Friend List successfully', result: {friendList} })
   } catch (error) {
@@ -185,26 +194,17 @@ export const mutualFriendController = async (req: Request, res: Response) => {
     const user = res.locals.user.id
     const friendId = req.query?.friendId as string;
 
-    const friendListUser = await prisma.friends.findMany({
-      where: {
-        AND: [
-          {
-            OR: [
-              { userId: user },
-              { userId: friendId },
-              { friendId: user },
-              { friendId },
-            ]
-          },
-          { status: 'ACCEPTED' }
-        ]
-      }
-    });
+    // Get friends related to both users
+    const friendListUserResult = await pool.query(
+      'SELECT * FROM friends WHERE (("userId" = $1) OR ("userId" = $2) OR ("friendId" = $1) OR ("friendId" = $2)) AND status = $3',
+      [user, friendId, 'ACCEPTED']
+    )
+    const friendListUser = friendListUserResult.rows
 
     const mutualFriendsIncludingUser = Array.from(
       new Set(
         friendListUser.reduce(
-          (acc, { userId, friendId }) => [...acc, userId, friendId],
+          (acc: string[], { userId, friendId }: any) => [...acc, userId, friendId],
           [] as string[]
         )
       )
@@ -223,9 +223,12 @@ export const pendingRequestsToUserController = async (req: Request, res: Respons
   try {
     const user = res.locals.user.id
 
-    const pendingFriendList = await prisma.friends.findMany({
-      where: {friendId: user, status: 'REQUESTED' }
-    });
+    // Get pending requests to this user
+    const pendingFriendListResult = await pool.query(
+      'SELECT * FROM friends WHERE "friendId" = $1 AND status = $2',
+      [user, 'REQUESTED']
+    )
+    const pendingFriendList = pendingFriendListResult.rows
 
     return res.status(200).json({ message: 'Got One Game successfully', result: {pendingFriendList} })
   } catch (error) {
@@ -238,9 +241,12 @@ export const pendingRequestsToFriendController = async (req: Request, res: Respo
   try {
     const user = res.locals.user.id
 
-    const pendingFriendList = await prisma.friends.findMany({
-      where: {userId: user, status: 'REQUESTED' }
-    });
+    // Get pending requests from this user
+    const pendingFriendListResult = await pool.query(
+      'SELECT * FROM friends WHERE "userId" = $1 AND status = $2',
+      [user, 'REQUESTED']
+    )
+    const pendingFriendList = pendingFriendListResult.rows
 
     return res.status(200).json({ message: 'Got One Game successfully', result: {pendingFriendList} })
   } catch (error) {

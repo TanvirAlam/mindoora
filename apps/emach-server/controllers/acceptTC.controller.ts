@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { prisma } from '../utils/PrismaInstance';
+import { miscQueries } from '../utils/query';
 import { findDuplicate } from './tools';
 import { saveTCSchema, saveTCType } from '../schema/TC.schema ';
 
@@ -11,13 +11,7 @@ export const saveAcceptTCController = async (req: Request<{}, {}, saveTCType>, r
     saveTCSchema.parse(req.body)
 
     if(await findDuplicate('acceptTC', { user }, res))return;
-    await prisma.acceptTC.create({
-      data: {
-        ipAddress,
-        user,
-        metadata
-      }
-    })
+    await miscQueries.createAcceptTC(ipAddress, user, metadata)
 
     return res.status(201).json({ message: 'Accept TC Added successfully' })
   } catch (error) {
@@ -29,7 +23,7 @@ export const saveAcceptTCController = async (req: Request<{}, {}, saveTCType>, r
 export const getAcceptTCController = async (req: Request, res: Response) => {
   try {
     const user = res.locals.user.id
-    const checkAcceptTC = await prisma.acceptTC.findFirst({where: {user}})
+    const checkAcceptTC = await miscQueries.getAcceptTC(user)
 
     if (!checkAcceptTC){
       return res.status(404).json({ message: 'Terms and Conditions Not Accepted'})

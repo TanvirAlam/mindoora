@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { prisma } from '../utils/PrismaInstance'
+import { miscQueries } from '../utils/query'
 import { createSubscriptionType, createSucscriptionSchema } from '../schema/auth/subscription.schema'
 import { findDuplicate } from './tools'
 
@@ -11,13 +11,7 @@ export const createSubscriptionController = async (req: Request<{}, {}, createSu
 
     if(await findDuplicate('subscription', { email }, res))return;
 
-    await prisma.subscription.create({
-      data: {
-        email,
-        ipAdress,
-        isActive: true
-      }
-    })
+    await miscQueries.createSubscription(email, ipAdress)
 
     return res.status(201).json({ message: 'Subscription Added successfully' })
   } catch (error) {

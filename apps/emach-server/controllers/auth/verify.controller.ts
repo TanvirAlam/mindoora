@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { prisma } from '../../utils/PrismaInstance';
+import { pool } from '../../utils/PrismaInstance';
 import validator from 'validator';
 
 function isValidEmail(email: string) {
@@ -22,7 +22,12 @@ export const verifyController = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid email address' });
     }
 
-    const lastVerificationCode = (await prisma.emailVerify.findMany({ where: { email } })).pop();
+    // Get the most recent verification code for this email
+    const verificationResult = await pool.query(
+      'SELECT * FROM "EmailVerify" WHERE email = $1 ORDER BY "createAt" DESC LIMIT 1',
+      [email]
+    );
+    const lastVerificationCode = verificationResult.rows[0];
 
     if (!lastVerificationCode) {
       return res.status(400).json({ message: 'Not Exists' });
@@ -30,22 +35,30 @@ export const verifyController = async (req: Request, res: Response) => {
     if (lastVerificationCode.code !== passcodeNumber) {
       return res.status(400).json({ message: 'Pass Code Not Matched' });
     }
-    if (lastVerificationCode.expireAt < localTime) {
+    if (new Date(lastVerificationCode.expireAt) < localTime) {
       return res.status(400).json({ message: 'Verification Code Expired' });
     }
 
-    const account = await prisma.register.findUnique(
-      {where: { email: email }
-    })
+    // Check if account exists and get verification status
+    const accountResult = await pool.query(
+      'SELECT * FROM "Register" WHERE email = $1',
+      [email]
+    );
+    const account = accountResult.rows[0];
+
+    if (!account) {
+      return res.status(404).json({ message: 'Account not found' });
+    }
 
     if (account.verified){
       return res.status(200).json({ message: 'Account is already verified' });
     }
 
-    await prisma.register.update({
-      where: { email: email },
-      data: { verified: true }
-    })
+    // Update account verification status
+    await pool.query(
+      'UPDATE "Register" SET verified = true WHERE email = $1',
+      [email]
+    )
 
     return res.status(200).json({ message: 'Account Verified' });
 

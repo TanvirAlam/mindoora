@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { prisma } from '../../utils/PrismaInstance'
+import { gameQueries, userQueries, notificationQueries, questionQueries } from '../../utils/query'
 import { createUserGameSchema, createUserGameType, updateUserGameSchema, updateUserGameType } from '../../schema/game/userGame.schema'
 import { findDuplicate, missingParams, userAccess } from '../tools'
 
@@ -11,42 +11,20 @@ export const createUserGameController = async (req: Request<{}, {}, createUserGa
 
     if (await findDuplicate('userGame', { title, user }, res)) return;
 
-    const game = await prisma.userGame.create({
-      data: {
-        title,
-        language,
-        nPlayer: +nPlayer,
-        user
-      }
-    })
+    // Create user game
+    const game = await gameQueries.createUserGame(title, language, +nPlayer, user)
 
-    const userName = (await prisma.user.findUnique({ where: { registerId: user }})).name
+    // Get user name
+    const userProfile = await userQueries.getUserByRegisterId(user)
+    const userName = userProfile?.name
 
-    const allUsers = await prisma.register.findMany({
-      where: {
-        NOT: {
-          id: user
-        }
-      },
-      select: {
-        id: true
-      }
-    })
+    // Get all other users
+    const arrayOfIds = await notificationQueries.getAllUserIds(user);
 
-    const arrayOfIds = allUsers.map(obj => obj.id);
-
+    // Create notifications for all users
     for (const i of arrayOfIds) {
-      await prisma.notifications.create({
-        data: {
-          from: user,
-          notification: `${userName} has created a new game: ${title}`,
-          recipients: {
-            create: {
-              recipientId: i
-            }
-          }
-        }
-      })
+      const notificationId = await notificationQueries.createNotification(user, `${userName} has created a new game: ${title}`)
+      await notificationQueries.createNotificationRecipient(notificationId, i)
     }
 
     req.io.emit('new_game_notification', { from: user, notification: `${userName} has created a new game: ${title}`, name: userName })
@@ -63,9 +41,7 @@ export const deleteUserGameController = async (req: Request, res: Response) => {
     if(missingParams({id}, res)) return;
     if(await userAccess('userGame', {id}, res) === null) return;
 
-    const game = await prisma.userGame.delete({
-      where: { id },
-    })
+    await gameQueries.deleteUserGame(id)
     return res.status(204).json({ message: 'Game deleted successfully' })
   } catch (error) {
     return res.status(500).json(error)
@@ -79,28 +55,22 @@ export const getAllGameController = async (req: Request, res: Response) => {
     const allGames = Array.isArray(allGame) ? allGame : [allGame];
 
     const myGames = await Promise.all(
-      allGames.map(async (g) => {
-        const [gameDetails, user] = await Promise.all([
-          prisma.userGameDetails.findUnique({ where: { gameId: g.id } }),
-          prisma.user.findFirst({ where: { registerId: g.user } })
-        ]);
+      allGames.map(async (g: any) => {
+        // Get game details and user info
+        const gameDetails = await gameQueries.getGameDetails(g.id)
 
-        const gameRooms = await prisma.gameRooms.findMany({
-          where: {gameId: g.id}
-        })
-        const nRoomsCreated = gameRooms.length
+        const user = await userQueries.getUserByRegisterId(g.user)
 
-        const questions = await prisma.questions.findMany({
-          where: {gameId: g.id}
-        })
-        const nQuestions = questions.length
+        // Get game rooms count
+        const nRoomsCreated = await gameQueries.getGameRoomsCount(g.id)
 
-        const gameStars = await prisma.userGameScore.findMany({
-          where: {gameId: g.id}
-        })
+        // Get questions count
+        const nQuestions = await gameQueries.getQuestionsCount(g.id)
+
+        // Get game scores and calculate average
+        const gameStars = await gameQueries.getGameScores(g.id)
         const nReviews = gameStars.length
-        const averageStars = nReviews > 0 ? gameStars.reduce((acc, gs)=> acc + gs.score, 0)/nReviews : 0;
-
+        const averageStars = nReviews > 0 ? gameStars.reduce((acc: number, gs: any) => acc + gs.score, 0)/nReviews : 0;
 
         return {
           ...g,
@@ -127,30 +97,23 @@ export const getAllOfAGameController = async (req: Request, res: Response) => {
 
     if(missingParams({id, title}, res)) return;
 
-    const whereCondition = id ? { id } : { title }
-
-    const oneGame = await prisma.userGame.findFirst({
-      where: {
-        ...whereCondition,
-        userGDetails: {
-          some: {
-            isPublic: true
-          }
-        }
-      },
-    })
+    // Find game with public details
+    let oneGame;
+    if (id) {
+      oneGame = await gameQueries.findPublicGameById(id)
+    } else {
+      oneGame = await gameQueries.findPublicGameByTitle(title)
+    }
 
     if (!oneGame) {
       return res.status(404).json({ message: 'Not Found' })
     }
 
-    const gameDetails = await prisma.userGameDetails.findFirst({
-      where: {gameId: oneGame.id}
-    })
+    // Get game details
+    const gameDetails = await gameQueries.getGameDetails(oneGame.id)
 
-    const questions = await prisma.questions.findMany({
-      where: {gameId: oneGame.id}
-    })
+    // Get questions
+    const questions = await questionQueries.getQuestionsByGameId(oneGame.id)
 
     return res.status(200).json({
       message: 'Got All of A Game successfully',
@@ -188,14 +151,7 @@ export const updateUserGameController = async (req: Request<{}, {}, updateUserGa
 
     if(await userAccess('userGame', {id}, res) === null) return;
 
-    const game = await prisma.userGame.update({
-      where: { id: id },
-      data: {
-        title,
-        language,
-        nPlayer: +nPlayer
-      }
-    })
+    const game = await gameQueries.updateUserGame(title, language, +nPlayer, id)
     return res.status(201).json({ message: 'Game updated successfully', gameId: game.id })
   } catch (error) {
     return res.status(500).json(error)
@@ -204,39 +160,26 @@ export const updateUserGameController = async (req: Request<{}, {}, updateUserGa
 
 export const getAllPublicGameController = async (req: Request, res: Response) => {
   try {
-
-    const allPublicGames = await prisma.userGame.findMany({
-      where: {
-        userGDetails: {
-          some: {
-            isPublic: true
-          }
-        }
-      }
-    })
+    const allPublicGames = await gameQueries.getPublicGames();
 
     const myGames = await Promise.all(
-      allPublicGames.map(async (g) => {
-        const [gameDetails, user] = await Promise.all([
-          prisma.userGameDetails.findUnique({ where: { gameId: g.id } }),
-          prisma.user.findFirst({ where: { registerId: g.user } })
-        ]);
+      allPublicGames.map(async (g: any) => {
+        // Get game details
+        const gameDetails = await gameQueries.getGameDetails(g.id)
 
-        const gameRooms = await prisma.gameRooms.findMany({
-          where: {gameId: g.id}
-        })
-        const nRoomsCreated = gameRooms.length
+        // Get user info
+        const user = await userQueries.getUserByRegisterId(g.user)
 
-        const questions = await prisma.questions.findMany({
-          where: {gameId: g.id}
-        })
-        const nQuestions = questions.length
+        // Get game rooms count
+        const nRoomsCreated = await gameQueries.getGameRoomsCount(g.id)
 
-        const gameStars = await prisma.userGameScore.findMany({
-          where: {gameId: g.id}
-        })
+        // Get questions count
+        const nQuestions = await gameQueries.getQuestionsCount(g.id)
+
+        // Get game scores and calculate average
+        const gameStars = await gameQueries.getGameScores(g.id)
         const nReviews = gameStars.length
-        const averageStars = nReviews > 0 ? gameStars.reduce((acc, gs)=> acc + gs.score, 0)/nReviews : 0;
+        const averageStars = nReviews > 0 ? gameStars.reduce((acc: number, gs: any) => acc + gs.score, 0) / nReviews : 0;
 
         return {
           ...g,
@@ -250,7 +193,7 @@ export const getAllPublicGameController = async (req: Request, res: Response) =>
       })
     );
 
-    return res.status(200).json({ message: 'Got All Public Games Successfully', result: {games: myGames} })
+    return res.status(200).json({ message: 'Got All Public Games Successfully', result: { games: myGames } })
   } catch (error) {
     return res.status(500).json(error)
   }
@@ -264,41 +207,27 @@ export const getAllPublicGameV2Controller = async (req: Request, res: Response) 
     if(missingParams({lastGame}, res)) return;
     const lastGameNumber = parseInt(lastGame);
 
-    const whereClause = category ? { category: category, isPublic: true } : { isPublic: true };
-
-    const allPublicGames = await prisma.userGame.findMany({
-      where: {
-        userGDetails: {
-          some: whereClause
-        }
-      },
-      orderBy: {createdAt: 'asc'},
-      skip: lastGameNumber,
-      take: 10
-    })
+    // Use centralized query for public games with pagination
+    const allPublicGames = await gameQueries.getPublicGamesWithPagination(lastGameNumber, category);
 
     const myGames = await Promise.all(
-      allPublicGames.map(async (g) => {
-        const [gameDetails, user] = await Promise.all([
-          prisma.userGameDetails.findUnique({ where: { gameId: g.id } }),
-          prisma.user.findFirst({ where: { registerId: g.user } })
-        ]);
+      allPublicGames.map(async (g: any) => {
+        // Get game details
+        const gameDetails = await gameQueries.getGameDetails(g.id)
 
-        const gameRooms = await prisma.gameRooms.findMany({
-          where: {gameId: g.id}
-        })
-        const nRoomsCreated = gameRooms.length
+        // Get user info
+        const user = await userQueries.getUserByRegisterId(g.user)
 
-        const questions = await prisma.questions.findMany({
-          where: {gameId: g.id}
-        })
-        const nQuestions = questions.length
+        // Get game rooms count
+        const nRoomsCreated = await gameQueries.getGameRoomsCount(g.id)
 
-        const gameStars = await prisma.userGameScore.findMany({
-          where: {gameId: g.id}
-        })
+        // Get questions count
+        const nQuestions = await gameQueries.getQuestionsCount(g.id)
+
+        // Get game scores and calculate average
+        const gameStars = await gameQueries.getGameScores(g.id)
         const nReviews = gameStars.length
-        const averageStars = nReviews > 0 ? gameStars.reduce((acc, gs)=> acc + gs.score, 0)/nReviews : 0;
+        const averageStars = nReviews > 0 ? gameStars.reduce((acc: number, gs: any) => acc + gs.score, 0) / nReviews : 0;
 
         return {
           ...g,
@@ -327,39 +256,30 @@ export const getAllOwnGamesControllerV2 = async (req: Request, res: Response) =>
     if(missingParams({lastGame}, res)) return;
     const lastGameNumber = parseInt(lastGame);
 
-    const allGames = await prisma.userGame.findMany({
-      where: {
-        user: res.locals.user.id
-      },
-      orderBy: {createdAt: 'asc'},
-      skip: lastGameNumber,
-      take: 10
-    })
-    if(allGames.length === 0) {return res.status(404).json({ message: "Not Found" });}
+    const allGames = await gameQueries.getUserOwnGames(res.locals.user.id, lastGameNumber)
+
+    if (allGames.length === 0) {
+      return res.status(404).json({ message: 'Not Found' })
+    }
 
     const myGames = await Promise.all(
-      allGames.map(async (g) => {
-        const [gameDetails, user] = await Promise.all([
-          prisma.userGameDetails.findUnique({ where: { gameId: g.id } }),
-          prisma.user.findFirst({ where: { registerId: g.user } })
-        ]);
+      allGames.map(async (g: any) => {
+        // Get game details
+        const gameDetails = await gameQueries.getGameDetails(g.id)
 
-        const gameRooms = await prisma.gameRooms.findMany({
-          where: {gameId: g.id}
-        })
-        const nRoomsCreated = gameRooms.length
+        // Get user info
+        const user = await userQueries.getUserByRegisterId(g.user)
 
-        const questions = await prisma.questions.findMany({
-          where: {gameId: g.id}
-        })
-        const nQuestions = questions.length
+        // Get game rooms count
+        const nRoomsCreated = await gameQueries.getGameRoomsCount(g.id)
 
-        const gameStars = await prisma.userGameScore.findMany({
-          where: {gameId: g.id}
-        })
+        // Get questions count
+        const nQuestions = await gameQueries.getQuestionsCount(g.id)
+
+        // Get game scores and calculate average
+        const gameStars = await gameQueries.getGameScores(g.id)
         const nReviews = gameStars.length
-        const averageStars = nReviews > 0 ? gameStars.reduce((acc, gs)=> acc + gs.score, 0)/nReviews : 0;
-
+        const averageStars = nReviews > 0 ? gameStars.reduce((acc: number, gs: any) => acc + gs.score, 0) / nReviews : 0;
 
         return {
           ...g,

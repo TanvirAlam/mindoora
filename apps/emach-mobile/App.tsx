@@ -3,12 +3,19 @@ import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import HomeScreen from './src/screens/home/HomeScreen';
+import JoinGameScreen from './src/screens/game/JoinGameScreen';
+import CreateGameScreen from './src/screens/game/CreateGameScreen';
+import UserProfileScreen from './src/screens/profile/UserProfileScreen';
+import SettingsScreen from './src/screens/settings/SettingsScreen';
 import authService from './src/services/auth/authService';
 import { User } from './src/types';
+
+type Screen = 'login' | 'home' | 'joinGame' | 'createGame' | 'userProfile' | 'settings';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
+  const [currentScreen, setCurrentScreen] = useState<Screen>('home');
 
   useEffect(() => {
     // Listen for authentication state changes
@@ -31,14 +38,79 @@ export default function App() {
     );
   }
 
+  const handleJoinGame = (gameCode: string) => {
+    console.log('Game joined with code:', gameCode);
+    // Here you can add logic to actually join the game
+    // For now, just go back to home
+    setCurrentScreen('home');
+  };
+
+  const handleGameCreated = (gameData: any) => {
+    console.log('Game created:', gameData);
+    // Here you can add logic to handle the created game
+    // For now, just go back to home
+    setCurrentScreen('home');
+  };
+
+  const renderScreen = () => {
+    if (!user) {
+      return <LoginScreen onLoginSuccess={() => {}} />;
+    }
+
+    switch (currentScreen) {
+      case 'home':
+        return (
+          <HomeScreen 
+            onLogout={() => setUser(null)}
+            onNavigateToJoinGame={() => setCurrentScreen('joinGame')}
+            onNavigateToCreateGame={() => setCurrentScreen('createGame')}
+            onNavigateToUserProfile={() => setCurrentScreen('userProfile')}
+            onNavigateToSettings={() => setCurrentScreen('settings')}
+          />
+        );
+      case 'joinGame':
+        return (
+          <JoinGameScreen 
+            onBack={() => setCurrentScreen('home')}
+            onJoinGame={handleJoinGame}
+          />
+        );
+      case 'createGame':
+        return (
+          <CreateGameScreen 
+            onBack={() => setCurrentScreen('home')}
+            onGameCreated={handleGameCreated}
+          />
+        );
+      case 'userProfile':
+        return (
+          <UserProfileScreen 
+            onBack={() => setCurrentScreen('home')}
+          />
+        );
+      case 'settings':
+        return (
+          <SettingsScreen 
+            onBack={() => setCurrentScreen('home')}
+          />
+        );
+      default:
+        return (
+          <HomeScreen 
+            onLogout={() => setUser(null)}
+            onNavigateToJoinGame={() => setCurrentScreen('joinGame')}
+            onNavigateToCreateGame={() => setCurrentScreen('createGame')}
+            onNavigateToUserProfile={() => setCurrentScreen('userProfile')}
+            onNavigateToSettings={() => setCurrentScreen('settings')}
+          />
+        );
+    }
+  };
+
   // Show appropriate screen based on authentication state
   return (
     <View style={styles.container}>
-      {user ? (
-        <HomeScreen onLogout={() => setUser(null)} />
-      ) : (
-        <LoginScreen onLoginSuccess={() => {}} />
-      )}
+      {renderScreen()}
       <StatusBar style="auto" />
     </View>
   );

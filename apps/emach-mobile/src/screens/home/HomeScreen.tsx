@@ -13,9 +13,12 @@ import authService from '../../services/auth/authService';
 
 interface HomeScreenProps {
   onLogout: () => void;
+  onNavigateToJoinGame?: () => void;
+  onNavigateToCreateGame?: () => void;
+  onNavigateToUserProfile?: () => void;
+  onNavigateToSettings?: () => void;
 }
-
-const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
+const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout, onNavigateToJoinGame, onNavigateToCreateGame, onNavigateToUserProfile, onNavigateToSettings }) => {
   const user = authService.getCurrentUser();
 
   const handleLogout = async () => {
@@ -66,7 +69,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image 
-            source={require('../../../assets/mindoora-short.png')} 
+            source={require('../../../assets/mindoora-short.png')}
             style={styles.headerLogo}
             resizeMode="contain"
           />
@@ -93,7 +96,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
               style={[styles.gameOption, { backgroundColor: option.color }]}
               onPress={() => {
                 // Handle navigation to different screens
-                console.log(`Navigate to ${option.title}`);
+                if (option.title === 'Join Game' && onNavigateToJoinGame) {
+                  onNavigateToJoinGame();
+                } else if (option.title === 'Create Game' && onNavigateToCreateGame) {
+                  onNavigateToCreateGame();
+                } else if (option.title === 'My Profile' && onNavigateToUserProfile) {
+                  onNavigateToUserProfile();
+                } else if (option.title === 'Settings' && onNavigateToSettings) {
+                  onNavigateToSettings();
+                } else {
+                  console.log(`Navigate to ${option.title}`);
+                }
               }}
             >
               <Text style={styles.gameOptionIcon}>{option.icon}</Text>

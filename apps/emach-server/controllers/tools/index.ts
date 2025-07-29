@@ -1,46 +1,60 @@
 import { Response } from 'express';
-import { prisma } from '../../utils/PrismaInstance';
+import { pool } from '../../utils/PrismaInstance';
 import multer from 'multer';
 import path from 'path';
 import crypto from 'crypto';
 import mime from 'mime-types';
 import sanitizeFilename from 'sanitize-filename';
 
-
-const models: Record<string, any> = {
-    userGame: prisma.userGame,
-    questions: prisma.questions,
-    userGameDetails: prisma.userGameDetails,
-    gameRooms: prisma.gameRooms,
-    questionsSolved: prisma.questionsSolved,
-    subscription: prisma.subscription,
-    feedback: prisma.feedback,
-    friends: prisma.friends,
-    userGameScore: prisma.userGameScore,
-    questionDB: prisma.questionDB,
-    followings: prisma.followings,
-    acceptTC: prisma.acceptTC,
-    gameExperience: prisma.gameExperience
+// Table name mapping for PostgreSQL queries
+const tableNames: Record<string, string> = {
+    userGame: 'UserGame',
+    questions: 'Questions',
+    userGameDetails: 'UserGameDetails',
+    gameRooms: 'GameRooms',
+    questionsSolved: 'QuestionsSolved',
+    subscription: 'Subscription',
+    feedback: 'Feedback',
+    friends: 'Friends',
+    userGameScore: 'userGameScore',
+    questionDB: 'QuestionDB',
+    followings: 'Followings',
+    acceptTC: 'AcceptTC',
+    gameExperience: 'gameExperience'
 };
 
 export const userAccess = async (modelKey: string, where: object, res: Response) => {
   try {
-    const model = models[modelKey];
-    const user = res.locals.user.id
-    if (!model) {
+    const tableName = tableNames[modelKey];
+    const user = res.locals.user.id;
+    
+    if (!tableName) {
         res.status(500).json({ message: 'Invalid model name' });
         return null;
     }
-    const findMany = await model.findMany({
-        where: {...where, user}
+
+    // Build WHERE clause dynamically
+    const whereKeys = Object.keys(where);
+    const whereValues = Object.values(where);
+    
+    let whereClause = '"user" = $1';
+    const queryParams = [user];
+    
+    whereKeys.forEach((key, index) => {
+        whereClause += ` AND "${key}" = $${index + 2}`;
+        queryParams.push(whereValues[index]);
     });
-    if (findMany.length === 0) {
+
+    const query = `SELECT * FROM "${tableName}" WHERE ${whereClause}`;
+    const result = await pool.query(query, queryParams);
+    
+    if (result.rows.length === 0) {
         res.status(404).json({ message: `${Object.keys(where)} Not Found` });
         return null;
-    }else if(findMany.length === 1) {
-        return findMany[0];
-    }else{
-        return findMany;
+    } else if(result.rows.length === 1) {
+        return result.rows[0];
+    } else {
+        return result.rows;
     }
   } catch (error) {
     return res.status(500).json({ message: 'Internal server error' });
@@ -48,26 +62,41 @@ export const userAccess = async (modelKey: string, where: object, res: Response)
 };
 
 export const findDuplicate = async (modelKey: string, where: object, res: Response) => {
-    const model = models[modelKey];
-    if (!model) {
+    const tableName = tableNames[modelKey];
+    if (!tableName) {
         return res.status(500).json({ message: 'Invalid model name' });
     }
-    const findDuplicateEntry = await model.findFirst({
-        where: {...where}
-    });
-    if (findDuplicateEntry) {
+
+    // Build WHERE clause dynamically
+    const whereKeys = Object.keys(where);
+    const whereValues = Object.values(where);
+    
+    let whereClause = whereKeys.map((key, index) => `"${key}" = $${index + 1}`).join(' AND ');
+    const query = `SELECT * FROM "${tableName}" WHERE ${whereClause} LIMIT 1`;
+    
+    const result = await pool.query(query, whereValues);
+    
+    if (result.rows.length > 0) {
         return res.status(409).json({ message: `${Object.keys(where)} Exists` });
     }
 };
 
 export const findDuplicateContinue = async (modelKey: string, where: object, res: Response) => {
-  const model = models[modelKey];
-  const findDuplicateEntry = await model.findFirst({
-      where: {...where}
-  });
-  if (findDuplicateEntry) {
-      return true;
-  }
+    const tableName = tableNames[modelKey];
+    if (!tableName) {
+        return false;
+    }
+
+    // Build WHERE clause dynamically
+    const whereKeys = Object.keys(where);
+    const whereValues = Object.values(where);
+    
+    let whereClause = whereKeys.map((key, index) => `"${key}" = $${index + 1}`).join(' AND ');
+    const query = `SELECT * FROM "${tableName}" WHERE ${whereClause} LIMIT 1`;
+    
+    const result = await pool.query(query, whereValues);
+    
+    return result.rows.length > 0;
 };
 
 export const missingParams = (params: { [key: string]: string | undefined }, res: Response) => {

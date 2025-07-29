@@ -4,6 +4,7 @@ export const endPoints = {
     login: "/v1/auth/login",
     verify: "/v1/auth/verify",
     resetPassword: "/auth/resetPassword",
+    oauthLogin: "/v1/auth/oauth/login",
   },
   userGame: {
     create: "/v1/usergame/create",

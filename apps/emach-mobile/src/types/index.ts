@@ -7,6 +7,7 @@ export interface User {
   provider: 'google' | 'facebook';
   trophies: Trophy[];
   totalScore: number;
+  accessToken?: string;
 }
 
 // Game Types

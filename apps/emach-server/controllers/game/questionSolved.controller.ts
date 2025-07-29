@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { prisma } from '../../utils/PrismaInstance'
+import { pool } from '../../utils/PrismaInstance'
 import { createQuestionSolveSchema, createQuestionSolveType } from '../../schema/game/questionSolve.schema'
 import {calculatePoint, findDuplicate, isExpired, missingParams} from '../tools'
 
@@ -13,17 +13,15 @@ export const createQuestionSolveController = async (req: Request<{}, {}, createQ
     } = req.body
     createQuestionSolveSchema.parse(req.body)
 
-    const gamePlayer = await prisma.gameRooms.findFirst({
-      where: {
-        gamePlayers: {
-          some: {
-            id: playerId,
-            isApproved: true
-          }
-        },
-        status: 'live'
-      }
-    })
+    // Find game room with approved player
+    const gamePlayerResult = await pool.query(
+      `SELECT gr.* FROM "gameRooms" gr 
+       JOIN "gamePlayers" gp ON gr.id = gp."roomId" 
+       WHERE gp.id = $1 AND gp."isApproved" = true AND gr.status = 'live' 
+       LIMIT 1`,
+      [playerId]
+    )
+    const gamePlayer = gamePlayerResult.rows[0]
 
     const isGameRoomExpired = gamePlayer? isExpired(gamePlayer.expiredAt): true;
 
@@ -35,9 +33,12 @@ export const createQuestionSolveController = async (req: Request<{}, {}, createQ
 
     let isRight = false;
 
-    const question = await prisma.questions.findUnique({
-      where: { id: questionId }
-    })
+    // Get question details
+    const questionResult = await pool.query(
+      'SELECT * FROM questions WHERE id = $1',
+      [questionId]
+    )
+    const question = questionResult.rows[0]
 
     if(timeTaken === 0){
       return res.status(404).json({message: 'Too Quick Answer'})
@@ -56,71 +57,52 @@ export const createQuestionSolveController = async (req: Request<{}, {}, createQ
       pointAchieved = calculatePoint(question.timeLimit, timeTaken)
     }
 
-      await prisma.questionsSolved.create({
-        data: {
-          playerId,
-          questionId,
-          answer,
-          rightAnswer: question.answer.toString(),
-          isRight,
-          timeLimit: question.timeLimit,
-          timeTaken,
-          point: pointAchieved
-        }
-      })
+    // Create question solved record
+    await pool.query(
+      'INSERT INTO "questionsSolved" ("playerId", "questionId", answer, "rightAnswer", "isRight", "timeLimit", "timeTaken", point) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [playerId, questionId, answer, question.answer.toString(), isRight, question.timeLimit, timeTaken, pointAchieved]
+    )
 
+    // Get all players in the room
+    const playersResult = await pool.query(
+      'SELECT * FROM "gamePlayers" WHERE "roomId" = $1',
+      [gamePlayer.id]
+    )
+    const players = playersResult.rows
 
-      const players = await prisma.gamePlayers.findMany({
-        where: { roomId: gamePlayer.id  }
+    let result = [];
+
+    for (const player of players) {
+      // Get questions solved by this player
+      const questionSolvedResult = await pool.query(
+        'SELECT * FROM "questionsSolved" WHERE "playerId" = $1',
+        [player.id]
+      )
+      const questionSolved = questionSolvedResult.rows
+
+      const nQuestionSolved = questionSolved.length;
+      const rightAnswered = questionSolved.filter((e: any) => e.isRight === true).length;
+      const points = questionSolved.reduce((sum: number, q: any) => sum + q.point, 0);
+
+      result.push({
+        playerName: player.name,
+        nQuestionSolved,
+        rightAnswered,
+        points
       });
+    }
 
-      let result = [];
+    // Get players who solved this specific question
+    const solvedQuestionIdsResult = await pool.query(
+      'SELECT qs."playerId" FROM "questionsSolved" qs JOIN "gamePlayers" gp ON qs."playerId" = gp.id WHERE gp."roomId" = $1 AND qs."questionId" = $2',
+      [gamePlayer.id, questionId]
+    )
+    const solvedQuestionIds = solvedQuestionIdsResult.rows.map((row: any) => row.playerId)
 
-      for (const player of players) {
-        const questionSolved = await prisma.questionsSolved.findMany({
-          where: { playerId: player.id }
-        });
+    req.io.to(gamePlayer.id).emit('result_response', result)
+    req.io.to(gamePlayer.id).emit('q_solve_response', {questionId, playerId: solvedQuestionIds})
 
-        const nQuestionSolved = questionSolved.length;
-        const rightAnswered = questionSolved.filter((e) => e.isRight === true).length;
-        const points = questionSolved.reduce((sum, q) => sum + q.point, 0);
-
-        result.push({
-          playerName: player.name,
-          nQuestionSolved,
-          rightAnswered,
-          points
-        });
-      }
-
-      const gameRoom = await prisma.gameRooms.findUnique({
-        where: {
-          id: gamePlayer.id
-        },
-        select: {
-          gamePlayers: {
-            select: {
-              qSolved: {
-                where: {
-                  questionId: questionId
-                },
-                select: {
-                  playerId: true
-                }
-              }
-            }
-          }
-        }
-      })
-
-      const solvedQuestionIds = gameRoom.gamePlayers
-      .map((player) => player.qSolved.map((question) => question.playerId))
-      .flat();
-
-      req.io.to(gamePlayer.id).emit('result_response', result)
-      req.io.to(gamePlayer.id).emit('q_solve_response', {questionId, playerId: solvedQuestionIds})
-
-      return res.status(201).json({ message: 'Question Solve Saved successfully', result: {isRight} })
+    return res.status(201).json({ message: 'Question Solve Saved successfully', result: {isRight} })
 
   } catch (error) {
     return res.status(500).json(error)
@@ -132,19 +114,15 @@ export const getAllQuestionSolvedController = async (req: Request, res: Response
     let playerId = req.query?.playerId as string;
     if(missingParams({playerId}, res))return;
 
-    const gamePlayer = await prisma.gameRooms.findFirst({
-      where: {
-        gamePlayers: {
-          some: {
-            id: playerId,
-            isApproved: true
-          }
-        },
-        status: {
-          not: 'closed'
-        }
-      }
-    })
+    // Find game room with approved player that is not closed
+    const gamePlayerResult = await pool.query(
+      `SELECT gr.* FROM "gameRooms" gr 
+       JOIN "gamePlayers" gp ON gr.id = gp."roomId" 
+       WHERE gp.id = $1 AND gp."isApproved" = true AND gr.status != 'closed' 
+       LIMIT 1`,
+      [playerId]
+    )
+    const gamePlayer = gamePlayerResult.rows[0]
 
     const isGameRoomExpired = gamePlayer? isExpired(gamePlayer.expiredAt): true;
 
@@ -152,9 +130,12 @@ export const getAllQuestionSolvedController = async (req: Request, res: Response
       return res.status(404).json({ message: 'Game Room not found' });
     }
 
-    const allSolvedQuestions = await prisma.questionsSolved.findMany({
-      where: {playerId}
-    })
+    // Get all solved questions for this player
+    const allSolvedQuestionsResult = await pool.query(
+      'SELECT * FROM "questionsSolved" WHERE "playerId" = $1',
+      [playerId]
+    )
+    const allSolvedQuestions = allSolvedQuestionsResult.rows
 
     return res.status(201).json({ message: 'Got all solved question successfully', result: {allSolvedQuestions} })
   } catch (error) {
@@ -167,19 +148,15 @@ export const getAllQuestionRawV2Controller = async (req: Request, res: Response)
     let playerId = req.query?.playerId as string;
     if(missingParams({playerId}, res))return;
 
-    const gamePlayer = await prisma.gameRooms.findFirst({
-      where: {
-        gamePlayers: {
-          some: {
-            id: playerId,
-            isApproved: true
-          }
-        },
-        status: {
-          in: ['live', 'finished']
-        }
-      }
-    })
+    // Find game room with approved player (live or finished)
+    const gamePlayerResult = await pool.query(
+      `SELECT gr.* FROM "gameRooms" gr 
+       JOIN "gamePlayers" gp ON gr.id = gp."roomId" 
+       WHERE gp.id = $1 AND gp."isApproved" = true AND gr.status IN ('live', 'finished') 
+       LIMIT 1`,
+      [playerId]
+    )
+    const gamePlayer = gamePlayerResult.rows[0]
 
     const isGameRoomExpired = gamePlayer? isExpired(gamePlayer.expiredAt): true;
 
@@ -187,21 +164,27 @@ export const getAllQuestionRawV2Controller = async (req: Request, res: Response)
       return res.status(404).json({ message: 'Game Room not found' });
     }
 
-    const allQuestionsRaw = await prisma.questions.findMany({
-      where: {gameId: gamePlayer.gameId}
-    })
+    // Get all questions for this game
+    const allQuestionsRawResult = await pool.query(
+      'SELECT * FROM questions WHERE "gameId" = $1',
+      [gamePlayer.gameId]
+    )
+    const allQuestionsRaw = allQuestionsRawResult.rows
 
-    const allSolvedQuestions = await prisma.questionsSolved.findMany({
-      where: {playerId}
-    })
+    // Get all solved questions for this player
+    const allSolvedQuestionsResult = await pool.query(
+      'SELECT * FROM "questionsSolved" WHERE "playerId" = $1',
+      [playerId]
+    )
+    const allSolvedQuestions = allSolvedQuestionsResult.rows
 
-    const allSolvedQuestionsId = allSolvedQuestions.map((q)=> q.questionId);
-    const allQuestions = allQuestionsRaw.map((question) => {
+    const allSolvedQuestionsId = allSolvedQuestions.map((q: any) => q.questionId);
+    const allQuestions = allQuestionsRaw.map((question: any) => {
       const { answer, ...restOfQuestion } = question;
       return {
         ...question,
         isAnswered: allSolvedQuestionsId.includes(question.id),
-        answered: +allSolvedQuestions.filter((q)=> q.questionId === question.id)[0]?.answer || null
+        answered: +allSolvedQuestions.filter((q: any) => q.questionId === question.id)[0]?.answer || null
       }
     });
 

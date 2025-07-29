@@ -1,4 +1,4 @@
-import { prisma } from '../utils/PrismaInstance';
+import { gameRoomQueries } from '../utils/query';
 import { createMessagesSchema, createMessagesType } from '../schema/game/messages.schema';
 
 export const createMessagesController = async (data: createMessagesType, io: any) => {
@@ -7,9 +7,7 @@ export const createMessagesController = async (data: createMessagesType, io: any
     const validatedData = createMessagesSchema.parse(data);
     const { roomId } = validatedData;
 
-    const isLiveRoom = await prisma.gameRooms.findFirst({
-      where: { id: roomId, status: { in: ['live', 'created'] } },
-    });
+    const isLiveRoom = await gameRoomQueries.findLiveRoomByStatus(roomId, ['live', 'created']);
 
     if (!isLiveRoom) {
       return;

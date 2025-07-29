@@ -1,6 +1,6 @@
 import express from 'express'
 import jwt from 'jsonwebtoken'
-import { prisma } from '../utils/PrismaInstance'
+import { pool } from '../utils/PrismaInstance'
 import type { CustomJwtPayload } from '../types/type'
 
 export const authenticateJWT = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -14,11 +14,13 @@ export const authenticateJWT = async (req: express.Request, res: express.Respons
         return res.status(403).json({ message: 'Invalid token' })
       }
 
-      const user = await prisma.register.findUnique({
-        where: {
-          email: decoded.email
-        }
-      })
+      // Query the Register table using PostgreSQL
+      const result = await pool.query(
+        'SELECT * FROM "Register" WHERE email = $1',
+        [decoded.email]
+      )
+
+      const user = result.rows[0]
 
       if (!user) {
         return res.status(403).json({ message: 'User not found' })

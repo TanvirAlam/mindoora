@@ -1,12 +1,19 @@
 import { Request, Response } from 'express'
 import bcrypt from 'bcrypt'
-import { prisma } from '../../utils/PrismaInstance'
+import { authQueries } from '../../utils/query'
 import sendVerificationEmail from './email.controller'
 import { createUser, createAccessToken, generateRandomCode } from '../../utils/auth/register'
 import { registerType, registerSchema } from '../../schema/auth/register.schema'
 
 export const registerController = async (req: Request<{}, {}, registerType>, res: Response) => {
   try {
+    console.log('📝 REGISTER CONTROLLER CALLED:', { 
+      email: req.body.email, 
+      name: req.body.name,
+      role: req.body.role,
+      verified: req.body.verified,
+      hasTrueCode: !!req.body.trueCode
+    })
     const { name, email, password, image, role, verified, trueCode } = req.body
     registerSchema.parse(req.body)
 
@@ -17,25 +24,28 @@ export const registerController = async (req: Request<{}, {}, registerType>, res
     }
 
     const hashedPassword = await bcrypt.hash(password, 10)
-    const existingUser = await prisma.register.findUnique({ where: { email } })
+    
+    // Get client information for enhanced login tracking
+    const ipAddress = req.ip || req.connection.remoteAddress || req.socket.remoteAddress
+    const userAgent = req.get('User-Agent')
+    
+    // Check if user already exists
+    const existingUser = await authQueries.findUserByEmail(email)
 
     if (existingUser) {
-      await prisma.loginHistory.create({
-        data: { userId: existingUser.id }
-      })
+      // Create login history entry for existing user attempting to register
+      await authQueries.createLoginHistory(
+        existingUser.id, 
+        'registration_attempt', 
+        ipAddress, 
+        userAgent,
+        null,
+        null
+      )
       return res.status(409).json({ message: 'User Exists!!' })
     } else {
-      const register = await prisma.register.create({
-        data: {
-          email,
-          phone: hashedPassword,
-          password: hashedPassword,
-          role,
-          accessToken: '',
-          verified: !isVerifyNeed
-        }
-      })
-
+      // Create new user registration
+      const register = await authQueries.createUser(email, hashedPassword, role, !isVerifyNeed)
 
       const user = await createUser({ name, image, registerId: register.id })
       const accessToken = await createAccessToken(register)
@@ -47,9 +57,8 @@ export const registerController = async (req: Request<{}, {}, registerType>, res
         expirationTime.setMinutes(expirationTime.getMinutes() + 5)
         sendVerificationEmail(email, verifyCode, 'Account Verify Code')
 
-        await prisma.emailVerify.create({
-          data: { email, createAt: new Date(), expireAt: expirationTime, code: +verifyCode }
-        })
+        // Create email verification entry
+        await authQueries.createEmailVerification(email, expirationTime, +verifyCode)
       }
 
       return res.status(201).json({
@@ -70,15 +79,15 @@ export const deleteAccountController = async (req: Request, res: Response) => {
   try {
     const user = res.locals.user.id
 
-    const checkUser = await prisma.register.findUnique({ where: { id: user } })
+    // Check if user exists
+    const checkUser = await authQueries.findUserByEmail(res.locals.user.email)
 
     if (!checkUser) {
       return res.status(404).json({ message: 'User Not Found' })
     }
 
-    await prisma.register.delete({
-      where: { id: user }
-    })
+    // Delete user (CASCADE will handle related records)
+    await authQueries.deleteAccount(user)
 
     return res.status(204).json({ message: 'Account deleted successfully' })
   } catch (error) {
