@@ -47,12 +47,12 @@ CREATE TABLE "Followings" (
 CREATE INDEX idx_followings_follower_id ON "Followings"("followerId");
 CREATE INDEX idx_followings_following_id ON "Followings"("followingId");
 
--- LoginHistory table
+-- LoginHistory table (independent - no foreign key constraints)
 CREATE TABLE "LoginHistory" (
     id SERIAL PRIMARY KEY,
     "loginTime" TIMESTAMP DEFAULT NOW(),
-    "userId" UUID NOT NULL,
-    CONSTRAINT fk_login_history_user FOREIGN KEY ("userId") REFERENCES "Register"(id) ON DELETE CASCADE
+    "userId" UUID NOT NULL
+    -- Note: userId can store any UUID value, no foreign key constraint
 );
 
 CREATE INDEX idx_login_history_user_id ON "LoginHistory"("userId");

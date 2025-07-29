@@ -1,11 +1,12 @@
 import { Request, Response } from 'express'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
-import { pool } from '../../utils/PrismaInstance'
+import { authQueries } from '../../utils/query'
 import {loginType,loginSchema} from '../../schema/auth/login.schema'
 
 export const loginController = async (req: Request<{},{},loginType>, res: Response) => {
   try {
+    console.log('🔐 LOGIN CONTROLLER CALLED:', { email: req.body.email, hasPassword: !!req.body.password })
     const { email, password } = req.body
     loginSchema.parse(req.body)
 
@@ -13,12 +14,12 @@ export const loginController = async (req: Request<{},{},loginType>, res: Respon
       return res.status(400).json({ message: 'Required data not found' })
     }
 
+    // Get client information for enhanced login tracking
+    const ipAddress = req.ip || req.connection.remoteAddress || req.socket.remoteAddress
+    const userAgent = req.get('User-Agent')
+    
     // Find user by email
-    const existingUserResult = await pool.query(
-      'SELECT * FROM "Register" WHERE email = $1',
-      [email]
-    )
-    const existingUser = existingUserResult.rows[0]
+    const existingUser = await authQueries.findUserByEmail(email)
     
     if (!existingUser) {
       return res.status(401).json({ message: 'User is not found' })
@@ -30,15 +31,19 @@ export const loginController = async (req: Request<{},{},loginType>, res: Respon
 
     const passwordMatch = await bcrypt.compare(password, existingUser.password)
     if (!passwordMatch) {
+      // Record failed login attempt
+      await authQueries.createFailedLoginHistory(
+        existingUser.id, 
+        'password', 
+        ipAddress, 
+        userAgent, 
+        'Invalid password'
+      )
       return res.status(401).json({ message: 'Password is not match' })
     }
 
     // Find user profile
-    const userResult = await pool.query(
-      'SELECT * FROM "User" WHERE "registerId" = $1',
-      [existingUser.id]
-    )
-    const user = userResult.rows[0]
+    const user = await authQueries.findUserProfile(existingUser.id)
 
     const token = jwt.sign(
       { email: existingUser.email },
@@ -47,15 +52,16 @@ export const loginController = async (req: Request<{},{},loginType>, res: Respon
     )
 
     // Update access token
-    await pool.query(
-      'UPDATE "Register" SET "accessToken" = $1 WHERE id = $2',
-      [token, existingUser.id]
-    )
+    await authQueries.updateAccessToken(token, existingUser.id)
 
-    // Create login history entry
-    await pool.query(
-      'INSERT INTO "LoginHistory" ("userId", "loginTime") VALUES ($1, NOW())',
-      [existingUser.id]
+    // Create enhanced login history entry
+    await authQueries.createLoginHistory(
+      existingUser.id, 
+      'password', 
+      ipAddress, 
+      userAgent,
+      null, // deviceInfo can be enhanced later
+      null  // location can be enhanced later
     )
 
     return res.status(200).json({ message: 'Login successful', ...existingUser, ...user, accessToken: token })

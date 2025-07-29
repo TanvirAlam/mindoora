@@ -23,11 +23,64 @@ export const authQueries = {
     return result.rows[0];
   },
 
-  createLoginHistory: async (userId: string) => {
+  createLoginHistory: async (userId: string, loginMethod: string = 'password', ipAddress?: string, userAgent?: string, deviceInfo?: any, location?: string) => {
+    console.log('📊 CREATING LOGIN HISTORY:', { userId, loginMethod, ipAddress, userAgent });
+    
+    // For login, always set status to LOGGED IN
+    const loginStatus = 'LOGGED IN';
+    
     await pool.query(
-      'INSERT INTO "LoginHistory" ("userId", "loginTime") VALUES ($1, NOW())',
+      `INSERT INTO "LoginHistory" ("userId", "loginTime", "loginMethod", "ipAddress", "userAgent", "deviceInfo", "location", "success", "loginStatus") 
+       VALUES ($1, NOW(), $2, $3, $4, $5, $6, true, $7)`,
+      [userId, loginMethod, ipAddress, userAgent, deviceInfo, location, loginStatus]
+    );
+    console.log('✅ LOGIN HISTORY CREATED SUCCESSFULLY with status:', loginStatus);
+  },
+
+  createLogoutHistory: async (userId: string, provider: string = 'logout', ipAddress?: string, userAgent?: string, deviceInfo?: any, location?: string) => {
+    console.log('📊 CREATING LOGOUT HISTORY:', { userId, provider, ipAddress, userAgent });
+    
+    // For logout, always set status to LOGGED OUT but keep the original provider as loginMethod
+    const loginStatus = 'LOGGED OUT';
+    
+    await pool.query(
+      `INSERT INTO "LoginHistory" ("userId", "loginTime", "loginMethod", "ipAddress", "userAgent", "deviceInfo", "location", "success", "loginStatus") 
+       VALUES ($1, NOW(), $2, $3, $4, $5, $6, true, $7)`,
+      [userId, provider, ipAddress, userAgent, deviceInfo, location, loginStatus]
+    );
+    console.log('✅ LOGOUT HISTORY CREATED SUCCESSFULLY with status:', loginStatus, 'and provider:', provider);
+  },
+
+  createFailedLoginHistory: async (userId: string, loginMethod: string = 'password', ipAddress?: string, userAgent?: string, reason?: string) => {
+    await pool.query(
+      `INSERT INTO "LoginHistory" ("userId", "loginTime", "loginMethod", "ipAddress", "userAgent", "deviceInfo", "success") 
+       VALUES ($1, NOW(), $2, $3, $4, $5, false)`,
+      [userId, loginMethod, ipAddress, userAgent, { reason }]
+    );
+  },
+
+  getLoginHistory: async (userId: string, limit: number = 25, offset: number = 0) => {
+    const result = await pool.query(
+      `SELECT "loginTime", "loginMethod", "ipAddress", "userAgent", "location", "success", "loginStatus" 
+       FROM "LoginHistory" 
+       WHERE "userId" = $1 
+       ORDER BY "loginTime" DESC 
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
+    );
+    return result.rows;
+  },
+
+  getCurrentLoginStatus: async (userId: string) => {
+    const result = await pool.query(
+      `SELECT "loginStatus", "loginTime", "loginMethod" 
+       FROM "LoginHistory" 
+       WHERE "userId" = $1 
+       ORDER BY "loginTime" DESC 
+       LIMIT 1`,
       [userId]
     );
+    return result.rows[0] || null;
   },
 
   createEmailVerification: async (email: string, expirationTime: Date, verifyCode: number) => {
@@ -90,6 +143,34 @@ export const authQueries = {
       'UPDATE register SET password = $1 WHERE id = $2',
       [hashedPassword, userId]
     );
+  },
+
+  // OAuth queries
+  insertOAuthProvider: async (userId: string, provider: string, providerId: string) => {
+    const query = `
+      INSERT INTO "OAuthProviders" ("userId", provider, "providerId", "lastUsed") 
+      VALUES ($1, $2, $3, NOW()) 
+      ON CONFLICT ("userId", provider) 
+      DO UPDATE SET "providerId" = $3, "lastUsed" = NOW()
+    `;
+    return await pool.query(query, [userId, provider, providerId]);
+  },
+
+  getOAuthProviders: async (userId: string) => {
+    const query = 'SELECT provider, "lastUsed" FROM "OAuthProviders" WHERE "userId" = $1 ORDER BY "lastUsed" DESC';
+    const result = await pool.query(query, [userId]);
+    return result.rows;
+  },
+
+  deleteOAuthProvider: async (userId: string, provider: string) => {
+    const query = 'DELETE FROM "OAuthProviders" WHERE "userId" = $1 AND provider = $2';
+    return await pool.query(query, [userId, provider]);
+  },
+
+  countOAuthProviders: async (userId: string) => {
+    const query = 'SELECT COUNT(*) as count FROM "OAuthProviders" WHERE "userId" = $1';
+    const result = await pool.query(query, [userId]);
+    return parseInt(result.rows[0].count);
   }
 };
 
