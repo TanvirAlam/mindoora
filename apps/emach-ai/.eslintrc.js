@@ -1,0 +1,36 @@
+module.exports = {
+  env: {
+    node: true,
+    es2022: true,
+    jest: true,
+  },
+  extends: [
+    'eslint:recommended',
+    'prettier',
+  ],
+  plugins: ['prettier'],
+  parserOptions: {
+    ecmaVersion: 'latest',
+    sourceType: 'module',
+  },
+  rules: {
+    'prettier/prettier': 'error',
+    'no-console': 'warn',
+    'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    'prefer-const': 'error',
+    'no-var': 'error',
+    'object-shorthand': 'error',
+    'prefer-arrow-callback': 'error',
+    'arrow-spacing': 'error',
+    'prefer-template': 'error',
+    'template-curly-spacing': 'error',
+    'no-useless-concat': 'error',
+    'no-multi-spaces': 'error',
+    'no-multiple-empty-lines': ['error', { max: 2 }],
+    'no-trailing-spaces': 'error',
+    'eol-last': 'error',
+    'comma-dangle': ['error', 'always-multiline'],
+    'semi': ['error', 'always'],
+    'quotes': ['error', 'single', { avoidEscape: true }],
+  },
+};
