@@ -1,5 +1,5 @@
 {
-  "name": "emach-server",
+  "name": "server",
   "version": "1.0",
   "private": true,
   "engines": {
@@ -9,29 +9,40 @@
     "yarn": "Please use pnpm"
   },
   "scripts": {
-    "dev": "nodemon index.ts",
-    "tester": "nyc mocha --exit --require ts-node/register 'test/**/*.ts'",
-    "test": "echo 'i love myself!'",
-    "build": "prisma generate && tsc",
-    "vercel-build": "npx prisma generate"
+    "test": "jest --coverage",
+    "test-exp": "jest --coverage node_modules/jest/bin/jest.js",
+    "dev": "NODE_ENV=development ts-node-dev -r tsconfig-paths/register src/index.ts --max-old-space-size=4096",
+    "build": "tsc -p . -outDir ./dist",
+    "prestart": "npm run build",
+    "start": "NODE_ENV=production ts-node-dev -r tsconfig-paths/register src/index.ts --max-old-space-size=4096",
+    "generate": "drizzle-kit generate",
+    "migrate": "DB_MAX_CONNECTIONS=1 tsx db/migrate.ts",
+    "reset": "DB_MAX_CONNECTIONS=1 tsx db/reset.ts",
+    "setup-db": "tsx db/setup-database.ts",
+    "drop": "drizzle-kit drop",
+    "studio": "start https://local.drizzle.studio && drizzle-kit studio",
+    "seed": "tsx db/seeds/index.ts"
   },
   "keywords": [],
-  "author": "",
+  "author": "Mindoora",
   "license": "ISC",
   "dependencies": {
-    "@prisma/client": "^5.17.0",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/nodemailer": "^6.4.15",
+    "@types/pg": "^8.15.5",
     "@types/uuid": "^9.0.8",
-    "bcrypt": "^5.1.1",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.44.4",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "livekit-server-sdk": "^1.2.7",
     "mime-types": "^2.1.35",
     "multer": "1.4.5-lts.1",
     "nodemailer": "^6.9.14",
+    "pg": "^8.16.3",
+    "postgres": "^3.4.7",
     "progress": "^2.0.3",
     "sanitize-filename": "^1.6.3",
     "socket.io": "^4.7.5",
@@ -54,14 +65,12 @@
     "@types/validator": "^13.12.0",
     "chai": "^4.5.0",
     "chai-http": "^4.4.0",
+    "drizzle-kit": "^0.31.4",
     "mocha": "^10.7.0",
     "nodemon": "^2.0.22",
     "nyc": "^15.1.0",
-    "prisma": "^5.17.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
     "typescript": "^5.5.4"
-  },
-  "prisma": {
-    "seed": "ts-node prisma/seed.ts"
   }
 }
