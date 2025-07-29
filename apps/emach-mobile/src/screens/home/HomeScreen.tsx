@@ -13,9 +13,10 @@ import authService from '../../services/auth/authService';
 
 interface HomeScreenProps {
   onLogout: () => void;
+  onNavigateToJoinGame?: () => void;
 }
 
-const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
+const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout, onNavigateToJoinGame }) => {
   const user = authService.getCurrentUser();
 
   const handleLogout = async () => {
@@ -93,7 +94,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
               style={[styles.gameOption, { backgroundColor: option.color }]}
               onPress={() => {
                 // Handle navigation to different screens
-                console.log(`Navigate to ${option.title}`);
+                if (option.title === 'Join Game' && onNavigateToJoinGame) {
+                  onNavigateToJoinGame();
+                } else {
+                  console.log(`Navigate to ${option.title}`);
+                }
               }}
             >
               <Text style={styles.gameOptionIcon}>{option.icon}</Text>
