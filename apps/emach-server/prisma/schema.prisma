@@ -1,0 +1,418 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Register {
+  id                String          @id @default(uuid())
+  email             String          @unique
+  phone             String          @unique
+  password          String
+  role              String
+  accessToken       String
+  verified          Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+
+  user              User?
+  emailVerify       EmailVerify[]
+  logins            LoginHistory[]
+  userGame          UserGame[]
+  images            Images[]
+  gameRooms         GameRooms[]
+  feedback          Feedback[]      @relation("feedback")
+  notificationTo    NRecipients[]   @relation("userTo")
+  notificationFrom  Notifications[] @relation("userFrom")
+  userFriends       Friends[]       @relation("userFriends")
+  friendUsers       Friends[]       @relation("friendUsers")
+  followers         Followings[]    @relation("follower")
+  following         Followings[]    @relation("following")
+  acceptTC          AcceptTC[]      @relation("AcceptTC")
+
+  @@index([email])
+}
+
+model User {
+  id                String          @id @default(uuid())
+  name              String
+  image             String?
+  registerId        String          @unique
+
+  register          Register        @relation(fields: [registerId], references: [id], onDelete: Cascade)
+
+  @@index([registerId])
+}
+
+model Followings {
+  id           Int       @id @default(autoincrement())
+  followingId  String
+  followerId   String
+
+  following    Register  @relation("following", fields: [followingId], references: [id])
+  follower     Register  @relation("follower", fields: [followerId], references: [id])
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+
+model LoginHistory {
+  id            Int           @id @default(autoincrement())
+  loginTime     DateTime      @default(now())
+  userId        String
+
+  user          Register      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Feedback {
+  id            Int           @id @default(autoincrement())
+  score         Int
+  feedback      String?
+  userId        String
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+
+  user          Register      @relation("feedback", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Notifications {
+  id            String        @id @default(uuid())
+  from          String
+  notification  String
+  isRead        Boolean       @default(false)
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+
+  recipients    NRecipients[]
+  userFrom      Register      @relation("userFrom", fields: [from], references: [id], onDelete: Cascade)
+
+  @@index([from])
+}
+
+model NRecipients {
+  id             Int            @id @default(autoincrement())
+  notificationId String
+  recipientId    String
+
+  notification   Notifications  @relation(fields: [notificationId], references: [id])
+  recipient      Register       @relation("userTo", fields: [recipientId], references: [id])
+
+
+  @@unique([notificationId, recipientId])
+  @@index([recipientId])
+}
+
+enum fStatus {
+  REQUESTED
+  ACCEPTED
+  REJECTED
+  PENDING
+}
+
+
+model Friends {
+  id            Int           @id @default(autoincrement())
+  userId        String
+  friendId      String
+  status        fStatus       @default(REQUESTED)
+  groupU        String[]      @default(["general"])
+  groupF        String[]      @default(["general"])
+  isFavoriteU   Boolean       @default(false)
+  isFavoriteF   Boolean       @default(false)
+  isPrivateU    Boolean       @default(false)
+  isPrivateF    Boolean       @default(false)
+  isBlockedU    Boolean       @default(false)
+  isBlockedF    Boolean       @default(false)
+  lastMeet      DateTime?
+  notesU        String?
+  notesF        String?
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user          Register      @relation("userFriends", fields: [userId], references: [id], onDelete: Cascade)
+  friend        Register      @relation("friendUsers", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([friendId])
+  @@unique([userId, friendId])
+}
+
+
+model EmailVerify {
+  id            Int           @id @default(autoincrement())
+  email         String
+  code          Int
+  expireAt      DateTime
+  createAt      DateTime      @default(now())
+
+  register      Register      @relation(fields: [email], references: [email], onDelete: Cascade)
+
+  @@index([email])
+}
+
+model Languages {
+  id            Int           @id @default(autoincrement())
+  name          String        @unique
+  imgUrl        String        @unique
+  shortName     String        @unique
+  isActive      Boolean       @default(true)
+
+  userGame      UserGame[]
+}
+
+model UserGame {
+  id            String        @id @default(uuid())
+  title         String
+  language      String
+  nPlayer       Int
+  user          String
+  createdAt     DateTime      @default(now())
+  languages     Languages     @relation(fields: [language], references: [shortName])
+  register      Register      @relation(fields: [user], references: [id], onDelete: Cascade)
+  userGDetails  UserGameDetails[]
+  questions     Questions[]
+  gameRooms     GameRooms[]
+  feedbackGame  FeedbackGame[]
+  userGameScore userGameScore[] @relation("userGameScore")
+
+
+  @@index([language])
+  @@index([user])
+}
+
+model UserGameDetails {
+  id            String        @id @default(uuid())
+  gameId        String        @unique
+  imgUrl        String?
+  description   String?
+  category      String        @default("none")
+  theme         String        @default("none")
+  keyWords      String[]      @default([])
+  isPublic      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+
+  userGame      UserGame      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@index([gameId])
+}
+
+
+model Questions {
+  id            String        @id @default(uuid())
+  gameId        String
+  question      String
+  answer        Int?
+  options       Json?
+  timeLimit     Int           @default(60)
+  qSource       String        @default("")
+  qImage        String?
+  qPoints       Float?
+  qTrophy       String?
+  createdAt     DateTime      @default(now())
+
+  userGame      UserGame      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  qSolved       QuestionsSolved[]
+
+  @@index([gameId])
+
+  @@unique([gameId, question])
+}
+
+model Images {
+  id            String        @id @default(uuid())
+  imgName       String
+  user          String
+  createdAt     DateTime      @default(now())
+
+  register      Register      @relation(fields: [user], references: [id], onDelete: Cascade)
+
+  @@index([user])
+}
+
+enum gameStatus {
+  created
+  live
+  finished
+  closed
+}
+
+model GameRooms {
+  id            String        @id @default(uuid())
+  gameId        String
+  inviteCode    String
+  status        gameStatus
+  user          String
+  createdAt     DateTime      @default(now())
+  expiredAt     DateTime
+
+  register      Register      @relation(fields: [user], references: [id], onDelete: Cascade)
+  userGame      UserGame      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  gamePlayers   GamePlayers[]
+  grMessages    GameRoomMessages[]
+  gameExp       gameExperience[]    @relation("gameExp")
+
+
+  @@index([user])
+  @@index([gameId])
+}
+
+enum gameRole {
+  admin
+  moderator
+  guest
+}
+
+model GamePlayers {
+  id            String        @id @default(uuid())
+  roomId        String
+  name          String
+  imgUrl        String?
+  role          gameRole
+  isApproved    Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+
+  gameRooms     GameRooms     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  qSolved       QuestionsSolved[]
+  grMessages    GameRoomMessages[]
+  feedbackGame  FeedbackGame[]
+  userGameScore userGameScore[] @relation("userGameScore")
+
+  @@index([roomId])
+
+  @@unique([roomId, name])
+}
+
+model QuestionsSolved {
+  id            String        @id @default(uuid())
+  playerId      String
+  questionId    String
+  answer        String
+  rightAnswer   String
+  isRight       Boolean
+  timeTaken     Int
+  timeLimit     Int
+  point         Int
+  createdAt     DateTime      @default(now())
+
+  gPlayers      GamePlayers   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  questions     Questions     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([playerId])
+  @@index([questionId])
+
+  @@unique([playerId, questionId])
+}
+
+model userGameScore {
+  score         Int
+  gameId        String
+  playerId      String
+  createdAt     DateTime      @default(now())
+
+  userGame      UserGame      @relation("userGameScore", fields: [gameId], references: [id], onDelete: Cascade)
+  gamePlayer    GamePlayers   @relation("userGameScore", fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([gameId, playerId])
+  @@unique([gameId, playerId])
+  @@index([gameId])
+  @@index([playerId])
+}
+
+model GameRoomMessages {
+  id            String        @id @default(uuid())
+  roomId        String
+  content       String
+  fileUrl       String?
+  playerId      String
+  deleted       Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime?
+
+  gPlayers      GamePlayers   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  gameRooms     GameRooms     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([playerId])
+  @@index([roomId])
+
+  @@unique([roomId, playerId])
+}
+
+model Subscription {
+  id            String        @id @default(uuid())
+  email         String
+  ipAdress      String
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+}
+
+model FeedbackGame {
+  id            Int           @id @default(autoincrement())
+  score         Int
+  feedback      String?
+  gameId        String
+  playerId      String
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+
+
+  game          UserGame      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player        GamePlayers   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([gameId])
+  @@index([playerId])
+  @@unique([gameId, playerId])
+}
+
+model QuestionDB {
+  id                        String        @id @default(uuid())
+  type                      String
+  difficulty                String
+  category                  String
+  question                  String
+  correct_answer            String
+  incorrect_answers         String[]
+  extra_incorrect_answers   String[]
+  user                      String
+  createdAt                 DateTime      @default(now())
+
+  @@index([type])
+  @@index([question])
+  @@unique([question])
+}
+
+model AcceptTC {
+  id                        String        @default(uuid())
+  timeOfAccept              DateTime      @default(now())
+  ipAddress                  String
+  metadata                  Json
+  user                      String
+
+  register      Register      @relation("AcceptTC", fields: [user], references: [id], onDelete: Cascade)
+
+  @@id([id])
+}
+
+model gameExperience {
+  id                        String        @default(uuid())
+  roomId                    String
+  totalQ                    Int
+  timeTaken                 Int
+  totalText                 Int
+  lavelOfFun                Float
+  createdAt                 DateTime      @default(now())
+
+  gameRooms                 GameRooms     @relation("gameExp", fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([id])
+}

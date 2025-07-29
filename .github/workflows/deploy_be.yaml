@@ -1,0 +1,65 @@
+name: emach-turborepo-BE-CI
+
+on:
+  push:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NEXTAUTH_SECRET: 'emach-mindoora'
+      NEXTAUTH_URL: 'http://localhost:3000'
+      DISCORD_CLIENT_ID: ''
+      DISCORD_CLIENT_SECRET: ''
+      NEXT_PUBLIC_SANITY_DATASET: 'mindoora'
+      NEXT_PUBLIC_SANITY_PROJECT_ID: 'gqqw11oz'
+      NEXT_PUBLIC_SANITY_API_TOKEN: 'skfm6letO3dIioEP3zZQjxTaAN5AbGEfTh0TcFGbsJ5nQRNTp92ftuPnmm4MA6533ZYfi1kZ0gBGRbN5Ad5GqvCyDhzffuJTxesMchY5LzSE0uQQZmuWlQcnVvSy9hvNjj4KH9CYa1PmXtDK0uDyqAIgMlMkJVdlrHU8Qgze9Tw0ID808scV'
+      DATABASE_URL: "postgres://mindoora:Cscp9UXmHRUCYIrpCEexFSFAY0v4Yrb4@dpg-clp1a5946foc73a5nk9g-a.oregon-postgres.render.com/mindoora"
+      NEXT_PUBLIC_TEST_EMAIL: "Rafbabu897@gmail.com"
+      NEXT_PUBLIC_TEST_PASSWORD: "12345678"
+      JWT_SECRETE: 'This-is-my-secrete-key'
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install pnpm
+        run: npm install -g pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - run: pnpm run build
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Install sshpass
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+      - name: Copy 'dist' Directory to Production Server
+        run: |
+          export SSHPASS="${{ secrets.SSH_PASSWORD }}"
+          sshpass -e scp -o PubkeyAuthentication=no -r apps/emach-server/dist mnsm@174.138.37.89:/home/mnsm/PBZ/apps/emach-server
+        env:
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+      - name: Copy 'package.json' to Production Server
+        run: |
+          export SSHPASS="${{ secrets.SSH_PASSWORD }}"
+          sshpass -e scp -o PubkeyAuthentication=no apps/emach-server/package.json mnsm@174.138.37.89:/home/mnsm/PBZ/apps/emach-server
+        env:
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+      - name: Install Dependencies and Restart Server
+        run: |
+          export SSHPASS="${{ secrets.SSH_PASSWORD }}"
+          sshpass -e ssh -o PubkeyAuthentication=no mnsm@174.138.37.89 "cd /home/mnsm/PBZ/apps/emach-server && /home/mnsm/.nvm/versions/node/v18.16.0/bin/node /home/mnsm/.nvm/versions/node/v18.16.0/bin/pnpm install && echo '${SSHPASS}' | sudo -S systemctl restart emach-server.service"
+        env:
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}

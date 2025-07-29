@@ -1,0 +1,14 @@
+[
+    {
+        "language": "English",
+        "localLang": "en",
+        "country":"US",
+        "altFlagImg":"US-Flag"
+    },
+    {
+        "language": "Danish",
+        "localLang": "da",
+        "country":"DK",
+        "altFlagImg":"DK-Flag"
+    }
+]

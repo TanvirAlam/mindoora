@@ -1,0 +1,44 @@
+{
+  "name": "emach-mobile",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "private": true,
+  "engines": {
+    "node": "23.x",
+    "pnpm": "10.x",
+    "npm": "Please use pnpm",
+    "yarn": "Please use pnpm"
+  },
+  "scripts": {
+    "start": "expo start",
+    "dev": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "build": "expo export",
+    "lint": "expo lint",
+    "test": "echo 'No tests specified'"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "^5.0.4",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-firebase/app": "^22.4.0",
+    "@react-native-firebase/auth": "^22.4.0",
+    "@react-native-firebase/database": "^22.4.0",
+    "@react-native-firebase/firestore": "^22.4.0",
+    "@react-native-google-signin/google-signin": "^15.0.0",
+    "expo": "~53.0.20",
+    "expo-status-bar": "~2.2.3",
+    "expo-web-browser": "^14.2.0",
+    "firebase": "^12.0.0",
+    "react": "19.0.0",
+    "react-native": "0.79.5",
+    "react-native-fbsdk-next": "^13.4.1",
+    "react-native-web": "^0.21.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@types/react": "~19.0.10",
+    "typescript": "~5.8.3"
+  }
+}

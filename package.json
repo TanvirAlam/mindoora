@@ -1,0 +1,42 @@
+{
+  "private": true,
+  "engines": {
+    "node": "23.x",
+    "pnpm": "10.x",
+    "npm": "Please use pnpm",
+    "yarn": "Please use pnpm"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "test": "turbo run test",
+    "prepare": "if [[ $NODE_ENV != \"production\" ]]; then husky install; fi"
+  },
+  "devDependencies": {
+    "@turbo/gen": "^1.10.12",
+    "commitizen": "^4.3.0",
+    "cz-conventional-changelog": "^3.3.0",
+    "eslint": "^8.46.0",
+    "eslint-config-custom": "workspace:^",
+    "husky": "^8.0.3",
+    "lint-staged": "^13.2.3",
+    "prettier": "^2.8.8",
+    "turbo": "^1.10.12"
+  },
+  "packageManager": "pnpm@10.13.1",
+  "name": "emach-turborepo",
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  },
+  "dependencies": {
+    "@ramonak/react-progress-bar": "^5.1.1"
+  }
+}

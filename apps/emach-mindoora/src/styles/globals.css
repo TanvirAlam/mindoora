@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Alfa+Slab+One&display=swap');
+@import url("https://fonts.googleapis.com/css?family=Luckiest+Guy&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #4d297b;
+  --secondary: #130F53;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--secondary) var(--primary);
+}
+
+/* Chrome, Edge, and Safari */
+*::-webkit-scrollbar {
+  width: 15px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--primary);
+  border-radius: 5px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--secondary);
+  border-radius: 14px;
+  border: 3px solid var(--primary);
+}
+
+@layer components {
+  .flex-row-center {
+    @apply flex flex-row items-center justify-center;
+  }
+  .flex-col-center {
+    @apply flex flex-col items-center justify-center;
+  }
+  .question-card {
+    @apply flex w-[45%] min-w-fit flex-row flex-wrap justify-between gap-8 rounded-lg bg-gradient-to-b from-[#272358] to-[#433E7D] p-2 transition-all duration-500;
+  }
+  .play-question-card {
+    @apply flex w-full min-w-fit flex-row flex-wrap items-center justify-start gap-8 rounded-lg bg-gradient-to-b from-[#272358] to-[#433E7D] p-2 transition-all duration-500;
+  }
+  .registerTextInput {
+    @apply block w-full rounded-lg border-gray-600   p-2.5 text-white placeholder-gray-400 sm:text-sm;
+  }
+}
