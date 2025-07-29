@@ -1,4 +1,4 @@
-name: emach-turborepo-BE-CI
+name: mindoora-turborepo-BE-CI
 
 on:
   push:
@@ -8,7 +8,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      NEXTAUTH_SECRET: 'emach-mindoora'
+      NEXTAUTH_SECRET: 'mindoora-web'
       NEXTAUTH_URL: 'http://localhost:3000'
       DISCORD_CLIENT_ID: ''
       DISCORD_CLIENT_SECRET: ''
@@ -48,18 +48,18 @@ jobs:
       - name: Copy 'dist' Directory to Production Server
         run: |
           export SSHPASS="${{ secrets.SSH_PASSWORD }}"
-          sshpass -e scp -o PubkeyAuthentication=no -r apps/emach-server/dist mnsm@174.138.37.89:/home/mnsm/PBZ/apps/emach-server
+          sshpass -e scp -o PubkeyAuthentication=no -r apps/mindoora-server/dist mnsm@174.138.37.89:/home/mnsm/PBZ/apps/mindoora-server
         env:
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
       - name: Copy 'package.json' to Production Server
         run: |
           export SSHPASS="${{ secrets.SSH_PASSWORD }}"
-          sshpass -e scp -o PubkeyAuthentication=no apps/emach-server/package.json mnsm@174.138.37.89:/home/mnsm/PBZ/apps/emach-server
+          sshpass -e scp -o PubkeyAuthentication=no apps/mindoora-server/package.json mnsm@174.138.37.89:/home/mnsm/PBZ/apps/mindoora-server
         env:
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
       - name: Install Dependencies and Restart Server
         run: |
           export SSHPASS="${{ secrets.SSH_PASSWORD }}"
-          sshpass -e ssh -o PubkeyAuthentication=no mnsm@174.138.37.89 "cd /home/mnsm/PBZ/apps/emach-server && /home/mnsm/.nvm/versions/node/v18.16.0/bin/node /home/mnsm/.nvm/versions/node/v18.16.0/bin/pnpm install && echo '${SSHPASS}' | sudo -S systemctl restart emach-server.service"
+          sshpass -e ssh -o PubkeyAuthentication=no mnsm@174.138.37.89 "cd /home/mnsm/PBZ/apps/mindoora-server && /home/mnsm/.nvm/versions/node/v18.16.0/bin/node /home/mnsm/.nvm/versions/node/v18.16.0/bin/pnpm install && echo '${SSHPASS}' | sudo -S systemctl restart mindoora-server.service"
         env:
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}

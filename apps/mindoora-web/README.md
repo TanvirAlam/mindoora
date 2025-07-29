@@ -40,11 +40,11 @@ Mindoora is an engaging online social drinking game that allows friends to have 
 
 ## Technologies
 
-- TurboRepo
-- React
-- Next.js 13
-- Tailwind CSS
-- Styled Components
+- [Next.js](https://nextjs.org)
+- [NextAuth.js](https://next-auth.js.org)
+- [Prisma](https://prisma.io)
+- [Tailwind CSS](https://tailwindcss.com)
+- [tRPC](https://trpc.io)
 
 ## Getting Started
 
@@ -52,14 +52,14 @@ To run the Mindoora application locally, follow these steps:
 
 ### Installation
 
-1. Clone this repository: `git clone https://github.com/mindoora/Mindoora.git`
-2. Navigate to the project directory: `cd Mindoora`
-3. Install dependencies: `npm install`
+1. Clone this repository: `git clone git@github.com:mindoora/mindoora-turborepo.git`
+2. Navigate to the project directory: `cd mindoora-turborepo`
+3. Install dependencies: `pnpm install`
 
 ### Usage
 
-1. Start the development server: `npm run dev`
-2. Open your web browser and navigate to `http://localhost:3000`
+1. Start the development server: `pnpm run dev`
+2. Open your web browser and navigate to `http://localhost:3020`
 
 ## Contributing
 
@@ -75,8 +75,8 @@ This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-Feel free to explore and enhance the PartyBroz application. If you have any questions or suggestions, please don't hesitate to get in touch with us.
+Feel free to explore and enhance the Mindoora application. If you have any questions or suggestions, please don't hesitate to get in touch with us.
 
 Visit our [official website](https://www.mindoora.com) for more information.
 
-Connect with us on [Twitter](https://twitter.com/Mindoora) | [Instagram](https://instagram.com/Mindoora) | [Facebook](https://facebook.com/Mindoora)
+Connect with us on [Twitter](https://twitter.com/mindoora) | [Instagram](https://instagram.com/mindoora) | [Facebook](https://facebook.com/mindoora)
