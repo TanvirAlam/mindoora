@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { pool } from '../utils/PrismaInstance';
+import { miscQueries } from '../utils/query';
 import { findDuplicate } from './tools';
 import { saveTCSchema, saveTCType } from '../schema/TC.schema ';
 
@@ -11,10 +11,7 @@ export const saveAcceptTCController = async (req: Request<{}, {}, saveTCType>, r
     saveTCSchema.parse(req.body)
 
     if(await findDuplicate('acceptTC', { user }, res))return;
-    await pool.query(
-      'INSERT INTO "acceptTC" ("ipAddress", "user", metadata) VALUES ($1, $2, $3)',
-      [ipAddress, user, metadata]
-    )
+    await miscQueries.createAcceptTC(ipAddress, user, metadata)
 
     return res.status(201).json({ message: 'Accept TC Added successfully' })
   } catch (error) {
@@ -26,11 +23,7 @@ export const saveAcceptTCController = async (req: Request<{}, {}, saveTCType>, r
 export const getAcceptTCController = async (req: Request, res: Response) => {
   try {
     const user = res.locals.user.id
-    const checkAcceptTCResult = await pool.query(
-      'SELECT * FROM "acceptTC" WHERE "user" = $1 LIMIT 1',
-      [user]
-    )
-    const checkAcceptTC = checkAcceptTCResult.rows[0]
+    const checkAcceptTC = await miscQueries.getAcceptTC(user)
 
     if (!checkAcceptTC){
       return res.status(404).json({ message: 'Terms and Conditions Not Accepted'})

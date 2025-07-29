@@ -1,4 +1,4 @@
-import { pool } from '../utils/PrismaInstance';
+import { gameRoomQueries } from '../utils/query';
 import { createMessagesSchema, createMessagesType } from '../schema/game/messages.schema';
 
 export const createMessagesController = async (data: createMessagesType, io: any) => {
@@ -7,11 +7,7 @@ export const createMessagesController = async (data: createMessagesType, io: any
     const validatedData = createMessagesSchema.parse(data);
     const { roomId } = validatedData;
 
-    const { rows } = await pool.query(
-      'SELECT id FROM gameRooms WHERE id = $1 AND status IN ($2, $3)',
-      [roomId, 'live', 'created']
-    );
-    const isLiveRoom = rows[0];
+    const isLiveRoom = await gameRoomQueries.findLiveRoomByStatus(roomId, ['live', 'created']);
 
     if (!isLiveRoom) {
       return;

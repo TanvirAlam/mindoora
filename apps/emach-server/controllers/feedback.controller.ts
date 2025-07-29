@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { pool } from '../utils/PrismaInstance'
+import { feedbackQueries, gamePlayerQueries } from '../utils/query'
 import { findDuplicate } from './tools'
 import { createFeedbackSchema, createFeedbackType, createGameScoreSchema, createGameScoreType } from '../schema/feedback.schema'
 
@@ -11,10 +11,7 @@ export const createFeedbackController = async (req: Request<{}, {}, createFeedba
 
     if(await findDuplicate('feedback', { userId: user, isActive: true }, res))return;
 
-    await pool.query(
-      'INSERT INTO feedback (score, feedback, "isActive", "userId") VALUES ($1, $2, $3, $4)',
-      [+score, feedback, true, user]
-    )
+    await feedbackQueries.createFeedback(+score, feedback, user)
 
     return res.status(201).json({ message: 'Feedback Added successfully' })
   } catch (error) {
@@ -28,25 +25,14 @@ export const createGameScoreController = async (req: Request<{}, {}, createGameS
     createGameScoreSchema.parse(req.body)
 
     // Check if player is approved
-    const userAccessResult = await pool.query(
-      'SELECT * FROM "gamePlayers" WHERE id = $1 AND "isApproved" = true LIMIT 1',
-      [playerId]
-    )
-    const userAccess = userAccessResult.rows[0]
+    const userAccess = await gamePlayerQueries.getApprovedGamePlayer(playerId)
 
     if(!userAccess){
       return res.status(404).json({ message: 'Approved Game Player Not Found' })
     }
 
     // Find game room with the player that is not closed
-    const liveRoomResult = await pool.query(
-      `SELECT gr.* FROM "gameRooms" gr 
-       JOIN "gamePlayers" gp ON gr.id = gp."roomId" 
-       WHERE gr."gameId" = $1 AND gp.id = $2 AND gr.status != 'closed' 
-       LIMIT 1`,
-      [gameId, playerId]
-    )
-    const isLiveRoom = liveRoomResult.rows[0]
+    const isLiveRoom = await gamePlayerQueries.findGamePlayerInLiveRoom(gameId, playerId)
 
     if(!isLiveRoom){
       return res.status(404).json({ message: 'Game Room Not Found' })
@@ -54,10 +40,7 @@ export const createGameScoreController = async (req: Request<{}, {}, createGameS
 
     if(await findDuplicate('userGameScore', { playerId, gameId }, res))return;
 
-    await pool.query(
-      'INSERT INTO "userGameScore" (score, "playerId", "gameId") VALUES ($1, $2, $3)',
-      [+score, playerId, gameId]
-    )
+    await feedbackQueries.createGameScore(+score, playerId, gameId)
 
     return res.status(201).json({ message: 'Score Added successfully' })
   } catch (error) {
