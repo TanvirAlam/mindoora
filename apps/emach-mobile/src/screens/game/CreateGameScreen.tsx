@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import aiService from '../../services/aiService';
 
 interface CreateGameScreenProps {
   onBack: () => void;
@@ -41,45 +42,73 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
     try {
       console.log('Generating questions for prompt:', prompt);
       
-      // Simulate API call to generate questions
-      // In production, you would call your AI service here
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // Call AI service to generate questions
+      const result = await aiService.generateQuestions(prompt, {
+        count: 5,
+        difficulty: 'medium',
+        model: 'flan-t5-small', // Use small model for faster response
+      });
       
-      // Mock generated questions
-      const mockQuestions: QuestionSet[] = [
-        {
-          question: `What is the main concept related to "${prompt}"?`,
-          options: ['Option A', 'Option B', 'Option C', 'Option D'],
-          correctAnswer: 0
-        },
-        {
-          question: `Which of the following best describes "${prompt}"?`,
-          options: ['Description A', 'Description B', 'Description C', 'Description D'],
-          correctAnswer: 1
-        },
-        {
-          question: `What is a key characteristic of "${prompt}"?`,
-          options: ['Characteristic A', 'Characteristic B', 'Characteristic C', 'Characteristic D'],
-          correctAnswer: 2
-        },
-        {
-          question: `How does "${prompt}" relate to its field?`,
-          options: ['Relation A', 'Relation B', 'Relation C', 'Relation D'],
-          correctAnswer: 3
-        },
-        {
-          question: `What is an important application of "${prompt}"?`,
-          options: ['Application A', 'Application B', 'Application C', 'Application D'],
-          correctAnswer: 0
-        }
-      ];
+      console.log('AI service response:', result);
       
-      setGeneratedQuestions(mockQuestions);
+      // Convert AI response format to our QuestionSet format
+      const convertedQuestions: QuestionSet[] = result.questions.map((q: any) => {
+        // Extract options A, B, C, D and find correct answer index
+        const optionsArray = [q.options.A, q.options.B, q.options.C, q.options.D];
+        const correctAnswerIndex = ['A', 'B', 'C', 'D'].indexOf(q.correctAnswer);
+        
+        return {
+          question: q.question,
+          options: optionsArray,
+          correctAnswer: correctAnswerIndex >= 0 ? correctAnswerIndex : 0,
+        };
+      });
+      
+      setGeneratedQuestions(convertedQuestions);
       setGameTitle(`Quiz: ${prompt}`);
+      
+      Alert.alert(
+        'Success!', 
+        `Generated ${convertedQuestions.length} questions successfully!`,
+        [{ text: 'OK' }]
+      );
       
     } catch (error) {
       console.error('Error generating questions:', error);
-      Alert.alert('Error', 'Failed to generate questions. Please try again.');
+      
+      let errorMessage = 'Failed to generate questions. Please try again.';
+      
+      if (error.message?.includes('Cannot connect to AI service')) {
+        errorMessage = 'Cannot connect to AI service. Please make sure the AI service is running.';
+      } else if (error.message?.includes('API key')) {
+        errorMessage = 'AI service requires API key configuration. Please check service setup.';
+      } else if (error.message?.includes('timeout')) {
+        errorMessage = 'Request timed out. The AI service might be busy. Please try again.';
+      }
+      
+      Alert.alert('Error', errorMessage, [
+        { text: 'Try Again', onPress: () => {} },
+        { 
+          text: 'Use Demo Mode', 
+          onPress: () => {
+            // Fallback to demo questions
+            const demoQuestions: QuestionSet[] = [
+              {
+                question: `What is the main concept related to "${prompt}"?`,
+                options: ['Option A', 'Option B', 'Option C', 'Option D'],
+                correctAnswer: 0
+              },
+              {
+                question: `Which of the following best describes "${prompt}"?`,
+                options: ['Description A', 'Description B', 'Description C', 'Description D'],
+                correctAnswer: 1
+              }
+            ];
+            setGeneratedQuestions(demoQuestions);
+            setGameTitle(`Demo Quiz: ${prompt}`);
+          }
+        }
+      ]);
     } finally {
       setIsGenerating(false);
     }
