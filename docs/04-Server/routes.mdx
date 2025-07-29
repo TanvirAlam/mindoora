@@ -1,0 +1,100 @@
+{
+  auth: {
+    register: "/v1/auth/register",  => register     => name, email, password, image, role, verified, trueCode as body
+    login: "/v1/auth/login",        => login        => email, password as body
+    verify: "/v1/auth/verify",      => verify login => email, passcode as query
+    resetPassword: "/auth/resetPassword",           => Not Effective
+  },
+  userGame: {
+    create: "/v1/usergame/create",          => create a game        => const { title, language, nPlayer } = req.body
+    update: "/v1/usergame/update",          => update a game        => const { id, title, language, nPlayer } = req.body
+    delete: "/v1/usergame/delete",          => delete a game        => const id = req.query?.id
+    all: "/v1/usergame/all",                => Not in Use
+    allv2: "/v1/usergame/allv2",            => get user's all game  => lastGame as query                    ==> lastGame is the total number of games in FE. it will give next 5 games after the lastGame
+    allpublic: "/v1/usergame/allpublic",    => Not in Use
+    allpublicv2: "/v1/usergame/allpublicv2",=> get all public game  => lastGame, category as query          ==> Do the same as prev
+    one: "/v1/usergame/one",                => get one game         => id || title as query                 ==> it will give just the game info title, language and nPlayer
+    allofgame: "/v1/usergame/allofgame"     => get all of a game    => id || title as query                 ==> it will give game, game details and questions of a game (protected route)
+  },
+  userGameOpen: {
+    one: "/v1/ousergame/one",               => get a public game    => id as query                          ==> it will give game, game details and questions of a public game (open route)
+  },
+  notification: {
+    all: "/v1/notification/all",            => get notification     => lastNotification as query            ==> it will give notifications as 25 batch upon the lastNotification number
+  },
+  question: {
+    create: "/v1/question/create",          => create a question    => gameId, question, answer, options, timeLimit, qSource, qImage, qPoints, qTrophy as body
+    update: "/v1/question/update",          => update a question    => id, question, answer, options, timeLimit, qSource, qImage, qPoints, qTrophy as body
+    delete: "/v1/question/delete",          => delete a question    => id as query
+    all: "/v1/question/all",                => get all questions of a game => gameId as query               ==> it will give all the questions of a game
+    one: "/v1/question/one",                => get one question     => id as query                          ==> it will give just a specific question
+  },
+  gameDetails: {
+    create: "/v1/gamedetails/create",       => save game details    => gameId, imgUrl, description, isPublic, category, theme, keyWords as body     ==> it depends on a game. after the creation of a game, you need to create that game's details
+    update: "/v1/gamedetails/update",       => update a game details => gameId, imgUrl, description, isPublic, category, theme, keyWords as body    ==> it will update one game details
+    delete: "/v1/gamedetails/delete",       => delete a game details => gameId || gametitle as query
+    one: "/v1/gamedetails/one",             =>  get one game details => gameId || gameTitle as query
+  },
+  image: {
+    upload: "/v1/image/upload",             => upload an image      ==> it will return an open path of the uploaded image
+    getone: "/v1/getimage/"                 => get an image         => filename as path parameter         ==> based on given path
+  },
+  gameRoom: {
+    create: "/v1/gameroom/create",          => create a game room   => gameId as body                   ==> to create a game room to play
+    delete: "/v1/gameroom/delete",          => delete a game room   => id as query                      ==> delete a game room giving the game room id
+    update: "/v1/gameroom/update",          => update a game room   => id, status as body               ==> update the status of a game room (created, live, finished, closed)
+    one: "/v1/gameroom/one",                => get a game room      => id as query                      ==> will give just game room information
+    allbystatus: "/v1/gameroom/allbystatus" => get rooms by status  => status as query                  ==> will give all the game rooms information by status i.e.('live')
+  },
+  gamePlayerOpen: {
+    create: "/v1/ogameplayer/create",       => create a game player => inviteCode, name as body         ==> will create a player for a game room (open route)
+    allplayer: "/v1/ogameplayer/allplayer", => get all players of a room => roomId, playerId as query   ==> will give all the players of a room (open route)
+    result: "/v1/ogameplayer/result"        => get the result of a game room   => roomId, playerId as query     ==> will give the game result of a game room (open route)
+  },
+  gamePlayerProtected: {
+    delete: "/v1/pgameplayer/delete",       => delete a player from a room  => id as query              ==> will delete a player from the game room (protected route). only the game room creator can do this
+    allplayer: "/v1/pgameplayer/allplayer", => get all players of a room    => roomId as query          ==> will give all the players of a room (protected route)
+    update: "/v1/pgameplayer/update",       => update the status of a player    => id, isApproved as body  ==> will update the player approval in a room (protected route)
+    confirmall: "/v1/pgameplayer/confirmall" => update status of all player in the room                 => roomId as body  ==> will approve all the players created in a room
+  },
+  questionSolved: {
+    create: "/v1/questionsolved/create",    => save a solved question  => playerId, questionId, answer, timeTaken as body  ==> when a player answer a question , it is saved here
+    allrawv2: "/v1/questionsolved/allrawv2",    => get all questions for game room => playerId as query ==> this is used in the game room to fetch the questions for a player
+    allsolved: "/v1/questionsolved/allsolved"   => get all solved questions for game room => playerId as query  ==> this is used in the game room to fetch the solved questions for a player
+  },
+  subscription: {
+    create: "/v1/subscription/create",      => subcrible email      => email as body        ==> subcrible email as user
+  },
+  livekit: {
+    get: "/v1/livekit/get",                 => not in Use
+  },
+  feedback: {
+    create: "/v1/feedback/create",          => save a feedback      => score, feedback as body  ==> save a feedback
+  },
+  gameScore: {
+    create: "/v1/gamescore/create",         => save a game feedback => score, gameId, playerId as body  ==> this can be used to save the user's feedback on a game room, after playing the game.
+  },
+  friend: {
+    send: "/v1/friend/send",            =>  send friend request     => friendId as body
+    delete: "/v1/friend/delete",        =>  delete friend request   => friendId as query
+    accept: "/v1/friend/accept",        =>  accept                  => userId as body
+    reject: "/v1/friend/reject",        => reject                   => userId as body
+    status: "/v1/friend/status",        => status of friendship     =>  friendId as query
+    all: "/v1/friend/all",              => all friends of a user    => None                     ==> will return all of the friends of a user
+    allmutual: "/v1/friend/allmutual",  =>  mutual friends of two users => friendId as query    ==> will return all of the mutual friends of two user , one is the main user and another one is his any friend
+    allpendingtome: "/v1/friend/allpendingtome",    => pending to me    => None                 ==> will return all the pending requests to me , so that i can accept from them
+    allpendingtofriend: "/v1/friend/allpendingtofriend" => pending to other's   => None         ==> will return the list of other users who has not accepted the requests of a user
+  },
+  qInDb: {
+    create: "/v1/qindb/create"          => to save a question in the DB     => type, difficulty, category, question, correct_answer, incorrect_answers, extra_incorrect_answers as body
+  },
+  user: {
+    getTopAuthors: "/v1/user/getTopAuthors",    => get top author           => None
+    getSearchedAuthors: "/v1/user/getSearchedAuthors",  => search author with name  => searchText as query
+    getOne: "/v1/user/getOne"                   => get one author           => userId as query
+  },
+  follow: {
+    create: "/v1/follow/create",        => follow a user                    => followingId as body
+    delete: "/v1/follow/delete",        => delete a follow                  => followingId as query
+  }
+};

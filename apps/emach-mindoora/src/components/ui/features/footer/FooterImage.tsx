@@ -1,0 +1,112 @@
+import Image from "next/image";
+
+const FooterTop = () => {
+  return (
+    <div className="bg-[#4d297b]">
+      <div className="flex items-center justify-center sm:block md:hidden lg:hidden">
+        <Image
+          src="/assets/footer/footer1.png"
+          width={400}
+          height={200}
+          alt="footer1"
+        />
+      </div>
+      <div className="hidden items-center justify-center overflow-hidden sm:hidden md:flex lg:hidden">
+        <Image
+          src="/assets/footer/footer1.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer2.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer2.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer3.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer3.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+      </div>
+      <div className="hidden items-center justify-center overflow-hidden lg:flex">
+        <Image
+          src="/assets/footer/footer1.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer2.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer2.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer3.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer3.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer3.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer1.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer3.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer2.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+        <Image
+          src="/assets/footer/footer3.png"
+          width={200}
+          height={200}
+          alt="footer1"
+        />
+      </div>
+    </div>
+  );
+};
+
+export default FooterTop;
