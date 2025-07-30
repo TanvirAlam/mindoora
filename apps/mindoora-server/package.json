@@ -16,7 +16,7 @@
     "prestart": "npm run build",
     "start": "NODE_ENV=production ts-node-dev -r tsconfig-paths/register index.ts --max-old-space-size=4096",
     "generate": "drizzle-kit generate",
-    "migrate": "DB_MAX_CONNECTIONS=1 tsx db/migrate.ts",
+    "migrate": "node db/migrate.js",
     "reset": "DB_MAX_CONNECTIONS=1 tsx db/reset.ts",
     "setup-db": "tsx db/setup-database.ts",
     "drop": "drizzle-kit drop",
