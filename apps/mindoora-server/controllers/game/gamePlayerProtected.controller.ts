@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import { pool } from '../../utils/PrismaInstance'
 import { missingParams, userAccess } from '../tools';
-import { updateGamePlayerStatusType, updateGamePlayerStatusSchema, updateConfirmAllGamePlayerType, updateConfirmAllGamePlayerSchema } from '../../schema/game/gamePlayers.schema';
+import { updateGamePlayerStatusType, updateGamePlayerStatusSchema, updateConfirmAllGamePlayerType, updateConfirmAllGamePlayerSchema } from '../../db/schemas/game/gamePlayers.schema';
 
 export const deleteGamePlayerController = async (req: Request, res: Response) => {
   try {

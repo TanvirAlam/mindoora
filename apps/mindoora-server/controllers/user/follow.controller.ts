@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { userQueries } from '../../utils/query'
-import { createFollowSchema } from '../../schema/follow.schema '
+import { createFollowSchema } from '../../db/schemas/follow.schema '
 import { findDuplicate, missingParams } from '../tools'
 
 

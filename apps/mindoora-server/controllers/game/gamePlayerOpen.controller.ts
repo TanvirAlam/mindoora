@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { pool } from '../../utils/PrismaInstance'
-import { createGamePlayersSchema, createGamePlayersType } from '../../schema/game/gamePlayers.schema'
+import { createGamePlayersSchema, createGamePlayersType } from '../../db/schemas/game/gamePlayers.schema'
 import { missingParams } from '../tools'
 
 export const createGamePlayerController = async (req: Request<{}, {}, createGamePlayersType>, res: Response) => {

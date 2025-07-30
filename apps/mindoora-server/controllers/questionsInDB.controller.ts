@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { miscQueries } from '../utils/query'
-import { questionsInDbSchema, questionsInDbType } from '../schema/questionsInDB.schema'
+import { questionsInDbSchema, questionsInDbType } from '../db/schemas/questionsInDB.schema'
 import { findDuplicateContinue } from './tools'
 
 

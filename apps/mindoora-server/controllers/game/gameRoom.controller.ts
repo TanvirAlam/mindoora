@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { pool } from '../../utils/PrismaInstance'
-import { createGameRoomSchema, createGameRoomType, updateGameRoomStatusSchema, updateGameRoomStatusType } from '../../schema/game/gameRooms.schema'
+import { createGameRoomSchema, createGameRoomType, updateGameRoomStatusSchema, updateGameRoomStatusType } from '../../db/schemas/game/gameRooms.schema'
 import { findDuplicate, isExpired, missingParams, userAccess } from '../tools'
 import { generateRandomCode } from '../../utils/game/gameRoom'
 
