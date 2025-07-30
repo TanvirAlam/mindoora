@@ -10,12 +10,12 @@
     "yarn": "Please use pnpm"
   },
   "scripts": {
-    "start": "expo start",
-    "dev": "expo start",
+    "start": "node init && expo start",
+    "dev": "node init && expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build": "expo export",
+    "build": "node init && expo export",
     "lint": "expo lint",
     "test": "echo 'No tests specified'"
   },

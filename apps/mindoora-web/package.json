@@ -9,15 +9,15 @@
     "yarn": "Please use pnpm"
   },
   "scripts": {
-    "build": "next build",
-    "dev": "next dev --port 3020",
+    "build": "node init && next build",
+    "dev": "node init && next dev --port 3020",
     "lint": "next lint",
-    "start": "next start",
+    "start": "node init && next start",
     "test": "jest --coverage",
     "test-sng": "jest",
     "make-feat": "plop",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "node init && storybook build"
   },
   "dependencies": {
     "@emotion/styled": "^11.13.0",

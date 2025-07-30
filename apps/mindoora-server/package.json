@@ -11,10 +11,10 @@
   "scripts": {
     "test": "jest --coverage",
     "test-exp": "jest --coverage node_modules/jest/bin/jest.js",
-    "dev": "NODE_ENV=development ts-node-dev -r tsconfig-paths/register index.ts --max-old-space-size=4096",
-    "build": "tsc -p . -outDir ./dist",
+    "dev": "node init && NODE_ENV=development ts-node-dev -r tsconfig-paths/register index.ts --max-old-space-size=4096",
+    "build": "node init && tsc -p . -outDir ./dist",
     "prestart": "npm run build",
-    "start": "NODE_ENV=production ts-node-dev -r tsconfig-paths/register index.ts --max-old-space-size=4096",
+    "start": "node init && NODE_ENV=production ts-node-dev -r tsconfig-paths/register index.ts --max-old-space-size=4096",
     "generate": "drizzle-kit generate",
     "migrate": "DB_MAX_CONNECTIONS=1 tsx db/migrate.ts",
     "reset": "DB_MAX_CONNECTIONS=1 tsx db/reset.ts",

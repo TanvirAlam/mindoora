@@ -42,8 +42,8 @@ const config = {
 
   // Model Configuration
   ai: {
-    defaultProvider: process.env.DEFAULT_AI_PROVIDER || 'openai',
-    fallbackProvider: process.env.FALLBACK_AI_PROVIDER || 'huggingface',
+    defaultProvider: process.env.DEFAULT_AI_PROVIDER || 'huggingface',
+    fallbackProvider: process.env.FALLBACK_AI_PROVIDER || 'openai',
     maxQuestionsPerRequest: parseInt(process.env.MAX_QUESTIONS_PER_REQUEST) || 5,
     questionGenerationTimeout: parseInt(process.env.QUESTION_GENERATION_TIMEOUT) || 30000,
   },
