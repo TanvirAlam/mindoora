@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { pool } from '../../utils/PrismaInstance'
-import { createQuestionSolveSchema, createQuestionSolveType } from '../../schema/game/questionSolve.schema'
+import { createQuestionSolveSchema, createQuestionSolveType } from '../../db/schemas/game/questionSolve.schema'
 import {calculatePoint, findDuplicate, isExpired, missingParams} from '../tools'
 
 export const createQuestionSolveController = async (req: Request<{}, {}, createQuestionSolveType>, res: Response) => {

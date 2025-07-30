@@ -5,7 +5,7 @@ import {
   createGameDetailsType,
   updateGameDetailsSchema,
   updateGameDetailsType
-} from '../../schema/game/gameDetails.schema'
+} from '../../db/schemas/game/gameDetails.schema'
 import { findDuplicate, missingParams, userAccess } from '../tools'
 
 export const createGameDetailsController = async (req: Request<{}, {}, createGameDetailsType>, res: Response) => {

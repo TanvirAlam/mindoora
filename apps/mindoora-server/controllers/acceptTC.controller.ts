@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { miscQueries } from '../utils/query';
 import { findDuplicate } from './tools';
-import { saveTCSchema, saveTCType } from '../schema/TC.schema ';
+import { saveTCSchema, saveTCType } from '../db/schemas/TC.schema ';
 
 export const saveAcceptTCController = async (req: Request<{}, {}, saveTCType>, res: Response) => {
   try {

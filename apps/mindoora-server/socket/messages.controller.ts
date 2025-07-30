@@ -1,5 +1,5 @@
 import { gameRoomQueries } from '../utils/query';
-import { createMessagesSchema, createMessagesType } from '../schema/game/messages.schema';
+import { createMessagesSchema, createMessagesType } from '../db/schemas/game/messages.schema';
 
 export const createMessagesController = async (data: createMessagesType, io: any) => {
   try {

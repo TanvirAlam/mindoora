@@ -2,7 +2,7 @@ import { Request, Response } from 'express'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import { authQueries } from '../../utils/query'
-import {loginType,loginSchema} from '../../schema/auth/login.schema'
+import {loginType,loginSchema} from '../../db/schemas/auth/login.schema'
 
 export const loginController = async (req: Request<{},{},loginType>, res: Response) => {
   try {

@@ -6,7 +6,7 @@ import {
   sendRequestType,
   acceptRejectRequestSchema,
   acceptRejectRequestType
-} from '../schema/friends.schema'
+} from '../db/schemas/friends.schema'
 
 export const sendRequestController = async (req: Request<{}, {}, sendRequestType>, res: Response) => {
   try {

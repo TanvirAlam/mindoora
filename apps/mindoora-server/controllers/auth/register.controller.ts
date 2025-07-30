@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt'
 import { authQueries } from '../../utils/query'
 import sendVerificationEmail from './email.controller'
 import { createUser, createAccessToken, generateRandomCode } from '../../utils/auth/register'
-import { registerType, registerSchema } from '../../schema/auth/register.schema'
+import { registerType, registerSchema } from '../../db/schemas/auth/register.schema'
 
 export const registerController = async (req: Request<{}, {}, registerType>, res: Response) => {
   try {

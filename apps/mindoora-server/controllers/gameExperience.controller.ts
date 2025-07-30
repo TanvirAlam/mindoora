@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { miscQueries } from '../utils/query'
-import { gameExperienceSchema, gameExperienceType } from '../schema/gameExperience.schema'
+import { gameExperienceSchema, gameExperienceType } from '../db/schemas/gameExperience.schema'
 import { findDuplicate } from './tools'
 
 

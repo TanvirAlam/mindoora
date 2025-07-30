@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { gameQueries, userQueries, notificationQueries, questionQueries } from '../../utils/query'
-import { createUserGameSchema, createUserGameType, updateUserGameSchema, updateUserGameType } from '../../schema/game/userGame.schema'
+import { createUserGameSchema, createUserGameType, updateUserGameSchema, updateUserGameType } from '../../db/schemas/game/userGame.schema'
 import { findDuplicate, missingParams, userAccess } from '../tools'
 
 export const createUserGameController = async (req: Request<{}, {}, createUserGameType>, res: Response) => {

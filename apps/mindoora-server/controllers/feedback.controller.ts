@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import { feedbackQueries, gamePlayerQueries } from '../utils/query'
 import { findDuplicate } from './tools'
-import { createFeedbackSchema, createFeedbackType, createGameScoreSchema, createGameScoreType } from '../schema/feedback.schema'
+import { createFeedbackSchema, createFeedbackType, createGameScoreSchema, createGameScoreType } from '../db/schemas/feedback.schema'
 
 export const createFeedbackController = async (req: Request<{}, {}, createFeedbackType>, res: Response) => {
   try {

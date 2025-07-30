@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { miscQueries } from '../utils/query'
-import { createSubscriptionType, createSucscriptionSchema } from '../schema/auth/subscription.schema'
+import { createSubscriptionType, createSucscriptionSchema } from '../db/schemas/auth/subscription.schema'
 import { findDuplicate } from './tools'
 
 export const createSubscriptionController = async (req: Request<{}, {}, createSubscriptionType>, res: Response) => {
