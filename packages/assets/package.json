@@ -1,0 +1,25 @@
+{
+  "name": "@mindoora/assets",
+  "version": "1.0.0",
+  "description": "Shared assets for all Mindoora applications",
+  "main": "index.js",
+  "files": [
+    "trophies/**/*",
+    "*.png",
+    "*.jpg",
+    "*.jpeg",
+    "*.svg",
+    "*.gif",
+    "*.webp"
+  ],
+  "keywords": [
+    "assets",
+    "images",
+    "trophies",
+    "mindoora"
+  ],
+  "license": "ISC",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

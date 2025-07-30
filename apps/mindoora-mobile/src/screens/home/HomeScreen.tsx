@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import authService from '../../services/auth/authService';
+import FeaturedTrophies from '../../components/FeaturedTrophies';
 
 interface HomeScreenProps {
   onLogout: () => void;
@@ -117,6 +118,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout, onNavigateToJoinGame,
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Featured Trophies */}
+        <FeaturedTrophies 
+          onViewAll={() => {
+            if (onNavigateToUserProfile) {
+              onNavigateToUserProfile();
+            }
+          }}
+        />
 
         {/* Stats Section */}
         <View style={styles.statsSection}>

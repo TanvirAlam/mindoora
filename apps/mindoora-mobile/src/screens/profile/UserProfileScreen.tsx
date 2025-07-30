@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import authService from '../../services/auth/authService';
+import TrophyCase from '../../components/TrophyCase'; // Import the new component
 
 interface UserProfileScreenProps {
   onBack: () => void;
@@ -111,7 +112,8 @@ const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onProfile
           <Text style={styles.avatarLabel}>Tap to change avatar</Text>
         </View>
 
-        {/* Stats Section */}
+        {/* Trophy Case */}
+        <TrophyCase />
         <View style={styles.statsSection}>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{user?.totalScore || 1250}</Text>
