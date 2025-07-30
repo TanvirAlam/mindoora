@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import aiService from '../../services/aiService';
+import { Colors } from '../../constants/colors';
 
 interface CreateGameScreenProps {
   onBack: () => void;
@@ -29,6 +30,7 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<QuestionSet[]>([]);
+  const [selectedQuestions, setSelectedQuestions] = useState<number[]>([]);
   const [gameTitle, setGameTitle] = useState('');
 
   const handleGenerateQuestions = async () => {
@@ -65,11 +67,12 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
       });
       
       setGeneratedQuestions(convertedQuestions);
+      setSelectedQuestions(convertedQuestions.map((_, index) => index)); // Select all questions by default
       setGameTitle(`Quiz: ${prompt}`);
       
       Alert.alert(
         'Success!', 
-        `Generated ${convertedQuestions.length} questions successfully!`,
+        `Generated ${convertedQuestions.length} questions successfully! Tap on questions to select/deselect them.`,
         [{ text: 'OK' }]
       );
       
@@ -105,6 +108,7 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
               }
             ];
             setGeneratedQuestions(demoQuestions);
+            setSelectedQuestions(demoQuestions.map((_, index) => index)); // Select all questions by default
             setGameTitle(`Demo Quiz: ${prompt}`);
           }
         }
@@ -114,17 +118,34 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
     }
   };
 
+  const toggleQuestionSelection = (questionIndex: number) => {
+    setSelectedQuestions(prev => {
+      if (prev.includes(questionIndex)) {
+        return prev.filter(index => index !== questionIndex);
+      } else {
+        return [...prev, questionIndex];
+      }
+    });
+  };
+
   const handleCreateGame = async () => {
     if (!gameTitle.trim()) {
       Alert.alert('Missing Title', 'Please enter a title for your game.');
       return;
     }
 
+    if (selectedQuestions.length === 0) {
+      Alert.alert('No Questions Selected', 'Please select at least one question for your game.');
+      return;
+    }
+
     try {
+      const selectedQuestionsList = selectedQuestions.map(index => generatedQuestions[index]);
+      
       const gameData = {
         title: gameTitle,
         prompt: prompt,
-        questions: generatedQuestions,
+        questions: selectedQuestionsList,
         createdAt: new Date().toISOString(),
       };
 
@@ -158,6 +179,7 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
           onPress: () => {
             setPrompt('');
             setGeneratedQuestions([]);
+            setSelectedQuestions([]);
             setGameTitle('');
           }
         }
@@ -265,43 +287,98 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
               />
             </View>
 
+            {/* Question Selection Instructions */}
+            <View style={styles.selectionInstructions}>
+              <Text style={styles.instructionText}>
+                📋 Tap on questions to select/deselect them for your game
+              </Text>
+              <Text style={styles.selectionCount}>
+                Selected: {selectedQuestions.length} / {generatedQuestions.length} questions
+              </Text>
+            </View>
+
             {/* Questions Preview */}
-            {generatedQuestions.map((question, index) => (
-              <View key={index} style={styles.questionCard}>
-                <Text style={styles.questionNumber}>Question {index + 1}</Text>
-                <Text style={styles.questionText}>{question.question}</Text>
-                
-                <View style={styles.optionsContainer}>
-                  {question.options.map((option, optionIndex) => (
-                    <View
-                      key={optionIndex}
-                      style={[
-                        styles.optionItem,
-                        optionIndex === question.correctAnswer && styles.correctOption
-                      ]}
-                    >
-                      <Text style={[
-                        styles.optionText,
-                        optionIndex === question.correctAnswer && styles.correctOptionText
-                      ]}>
-                        {String.fromCharCode(65 + optionIndex)}. {option}
-                      </Text>
-                      {optionIndex === question.correctAnswer && (
-                        <Text style={styles.correctIndicator}>✓</Text>
-                      )}
+            {generatedQuestions.map((question, index) => {
+              const isSelected = selectedQuestions.includes(index);
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.questionCard,
+                    isSelected ? styles.questionCardSelected : styles.questionCardUnselected
+                  ]}
+                  onPress={() => toggleQuestionSelection(index)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.questionHeader}>
+                    <Text style={[
+                      styles.questionNumber,
+                      isSelected && styles.questionNumberSelected
+                    ]}>
+                      Question {index + 1}
+                    </Text>
+                    <View style={[
+                      styles.selectionIndicator,
+                      isSelected ? styles.selectionIndicatorSelected : styles.selectionIndicatorUnselected
+                    ]}>
+                      {isSelected && <Text style={styles.selectionCheckmark}>✓</Text>}
                     </View>
-                  ))}
-                </View>
-              </View>
-            ))}
+                  </View>
+                  
+                  <Text style={[
+                    styles.questionText,
+                    isSelected && styles.questionTextSelected
+                  ]}>
+                    {question.question}
+                  </Text>
+                  
+                  <View style={styles.optionsContainer}>
+                    {question.options.map((option, optionIndex) => (
+                      <View
+                        key={optionIndex}
+                        style={[
+                          styles.optionItem,
+                          optionIndex === question.correctAnswer && styles.correctOption,
+                          isSelected && optionIndex === question.correctAnswer && styles.correctOptionSelected
+                        ]}
+                      >
+                        <Text style={[
+                          styles.optionText,
+                          optionIndex === question.correctAnswer && styles.correctOptionText,
+                          isSelected && styles.optionTextSelected,
+                          isSelected && optionIndex === question.correctAnswer && styles.correctOptionTextSelected
+                        ]}>
+                          {String.fromCharCode(65 + optionIndex)}. {option}
+                        </Text>
+                        {optionIndex === question.correctAnswer && (
+                          <Text style={[
+                            styles.correctIndicator,
+                            isSelected && styles.correctIndicatorSelected
+                          ]}>✓</Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
 
             {/* Action Buttons */}
             <View style={styles.actionButtons}>
               <TouchableOpacity
-                style={styles.createGameButton}
+                style={[
+                  styles.createGameButton,
+                  selectedQuestions.length === 0 && styles.createGameButtonDisabled
+                ]}
                 onPress={handleCreateGame}
+                disabled={selectedQuestions.length === 0}
               >
-                <Text style={styles.createGameButtonText}>Create Game</Text>
+                <Text style={[
+                  styles.createGameButtonText,
+                  selectedQuestions.length === 0 && styles.createGameButtonTextDisabled
+                ]}>
+                  Create Game ({selectedQuestions.length} questions)
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -635,6 +712,110 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
+  },
+  
+  // Selection styles
+  selectionInstructions: {
+    backgroundColor: Colors.primaryLight,
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  instructionText: {
+    fontSize: 16,
+    color: Colors.primary,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  selectionCount: {
+    fontSize: 14,
+    color: Colors.primary,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  
+  // Question card selection styles
+  questionCardSelected: {
+    backgroundColor: Colors.primary,
+    borderWidth: 3,
+    borderColor: Colors.primaryDark,
+  },
+  questionCardUnselected: {
+    opacity: 0.7,
+    borderWidth: 2,
+    borderColor: '#ddd',
+  },
+  
+  questionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  
+  questionNumberSelected: {
+    color: '#fff',
+  },
+  
+  questionTextSelected: {
+    color: '#fff',
+  },
+  
+  selectionIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+  },
+  
+  selectionIndicatorSelected: {
+    backgroundColor: '#fff',
+    borderColor: '#fff',
+  },
+  
+  selectionIndicatorUnselected: {
+    backgroundColor: 'transparent',
+    borderColor: '#ddd',
+  },
+  
+  selectionCheckmark: {
+    color: Colors.primary,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  
+  // Option styles for selected questions
+  optionTextSelected: {
+    color: '#fff',
+  },
+  
+  correctOptionSelected: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: '#fff',
+  },
+  
+  correctOptionTextSelected: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  
+  correctIndicatorSelected: {
+    color: '#fff',
+  },
+  
+  // Create button disabled styles
+  createGameButtonDisabled: {
+    backgroundColor: '#ccc',
+    opacity: 0.6,
+  },
+  
+  createGameButtonTextDisabled: {
+    color: '#999',
   },
 });
 
