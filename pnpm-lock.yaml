@@ -659,6 +659,8 @@ importers:
         specifier: ^5.5.4
         version: 5.8.3
 
+  packages/assets: {}
+
   packages/eslint-config-custom:
     dependencies:
       eslint-config-next:
