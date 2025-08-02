@@ -21,6 +21,20 @@ import Spinner from '../../components/ui/Spinner';
 interface CreateGameScreenProps {
   onBack: () => void;
   onGameCreated?: (gameData: any) => void;
+  editingGame?: GameData | null; // Optional game data for editing
+}
+
+interface GameData {
+  id: string;
+  title: string;
+  questionCount?: number;
+  questionsCount?: number;
+  isReady?: boolean;
+  maxQuestions?: number;
+  remainingQuestions?: number;
+  createdAt?: string;
+  language?: string;
+  nPlayer?: number;
 }
 
 interface QuestionSet {
@@ -29,15 +43,30 @@ interface QuestionSet {
   correctAnswer: number;
 }
 
-const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreated }) => {
+const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreated, editingGame }) => {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<QuestionSet[]>([]);
   const [selectedQuestions, setSelectedQuestions] = useState<number[]>([]);
-  const [gameTitle, setGameTitle] = useState('');
+  const [gameTitle, setGameTitle] = useState(editingGame?.title || '');
   const [totalSelectedQuestions, setTotalSelectedQuestions] = useState(0);
   const [showMyGames, setShowMyGames] = useState(false);
   const [isCreatingGame, setIsCreatingGame] = useState(false);
+  const [editingGameData, setEditingGameData] = useState<GameData | null>(editingGame || null);
+
+  // Handle navigation from MyGamesScreen EDIT button
+  const handleNavigateToAddQuestions = (gameData: GameData) => {
+    setEditingGameData(gameData);
+    setGameTitle(gameData.title);
+    setShowMyGames(false);
+    
+    // Provide user feedback about editing mode
+    Alert.alert(
+      'Edit Game',
+      `Now editing "${gameData.title}". Generate questions to add to this existing game.`,
+      [{ text: 'OK' }]
+    );
+  };
 
 const handleGenerateQuestions = async () => {
     if (!prompt.trim()) {
@@ -156,34 +185,45 @@ const handleGenerateQuestions = async () => {
     try {
       const selectedQuestionsList = selectedQuestions.map(index => generatedQuestions[index]);
       
-      const gameData = {
-        title: gameTitle,
-        prompt: prompt,
-        questions: selectedQuestionsList,
-        createdAt: new Date().toISOString(),
-      };
+      if (editingGameData) {
+        // We're editing an existing game - add questions to it
+        console.log('Adding questions to existing game:', editingGameData.id);
+        await addQuestionsToExistingGame(editingGameData.id, selectedQuestionsList);
+        
+        Alert.alert('Success', `Added ${selectedQuestionsList.length} questions to "${editingGameData.title}" successfully!`, [
+          { text: 'OK', onPress: onBack }
+        ]);
+      } else {
+        // We're creating a new game
+        const gameData = {
+          title: gameTitle,
+          prompt: prompt,
+          questions: selectedQuestionsList,
+          createdAt: new Date().toISOString(),
+        };
 
-      console.log('Creating game with backend:', gameData);
-      
-      // Call backend to save game and questions
-      await saveGameWithQuestions(gameData);
+        console.log('Creating new game with backend:', gameData);
+        await saveGameWithQuestions(gameData);
 
-      Alert.alert('Success', 'Game created successfully!', [
-        { text: 'OK', onPress: onBack }
-      ]);
+        Alert.alert('Success', 'Game created successfully!', [
+          { text: 'OK', onPress: onBack }
+        ]);
+      }
     } catch (error) {
-      console.error('Error creating game:', error);
+      console.error('Error with game operation:', error);
       
-      let errorMessage = 'Failed to create game. Please try again.';
+      let errorMessage = editingGameData 
+        ? 'Failed to add questions to game. Please try again.'
+        : 'Failed to create game. Please try again.';
       let errorTitle = 'Error';
       
       if (error.message?.includes('No token provided') || error.message?.includes('authentication') || error.message?.includes('401') || error.message?.includes('User is not authenticated')) {
         errorTitle = 'Authentication Error';
-        errorMessage = error.message?.includes('User is not authenticated') ? 'Please sign in again to create games.' : 'Authentication failed. Please try signing in again.';
+        errorMessage = error.message?.includes('User is not authenticated') ? 'Please sign in again to continue.' : 'Authentication failed. Please try signing in again.';
       } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
         errorMessage = 'Network error. Please check your connection and try again.';
-      } else if (error.message?.includes('Failed to save')) {
-        errorMessage = 'Unable to save game to server. The backend service may be unavailable.';
+      } else if (error.message?.includes('Failed to save') || error.message?.includes('Failed to add')) {
+        errorMessage = 'Unable to save to server. The backend service may be unavailable.';
       }
       
       Alert.alert(errorTitle, errorMessage, [
@@ -194,7 +234,9 @@ const handleGenerateQuestions = async () => {
             // For now, just show success message as if saved locally
             Alert.alert(
               'Saved Locally', 
-              'Your game has been saved locally! Once authentication is implemented, it will sync to the server.',
+              editingGameData 
+                ? 'Your questions have been saved locally! Once authentication is implemented, they will sync to the server.'
+                : 'Your game has been saved locally! Once authentication is implemented, it will sync to the server.',
               [{ text: 'OK', onPress: onBack }]
             );
           }
@@ -241,6 +283,81 @@ const handleGenerateQuestions = async () => {
     return await response.json();
   };
 
+  const addQuestionsToExistingGame = async (gameId: string, questions: QuestionSet[]) => {
+    const currentUser = authService.getCurrentUser();
+    
+    if (!currentUser || !currentUser.accessToken) {
+      throw new Error('User is not authenticated. Please sign in first.');
+    }
+
+    console.log(`Adding ${questions.length} questions to game ${gameId}`);
+    
+    // Convert questions to the format expected by the backend API
+    const questionsData = questions.map(q => {
+      // Convert options array back to A, B, C, D object format
+      const optionsObj = {
+        A: q.options[0] || '',
+        B: q.options[1] || '',
+        C: q.options[2] || '',
+        D: q.options[3] || ''
+      };
+      
+      return {
+        gameId: gameId,
+        question: q.question,
+        answer: q.correctAnswer.toString(), // Backend expects string representation of numeric index ("0", "1", "2", "3")
+        options: optionsObj, // Backend schema expects options as object, controller will stringify it
+        timeLimit: 60, // Default time limit
+        qSource: 'ai-generated', // Required field
+        qPoints: 10 // Default points
+      };
+    });
+
+    console.log('Formatted questions data:', questionsData[0]); // Log first question for debugging
+
+    // Add questions one by one using the correct API endpoint
+    for (const [index, questionData] of questionsData.entries()) {
+      console.log(`Adding question ${index + 1}/${questionsData.length}:`, questionData.question);
+      
+      const response = await fetch('http://localhost:8080/api/v1/question/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUser.accessToken}`
+        },
+        body: JSON.stringify(questionData)
+      });
+      
+      console.log(`Question ${index + 1} response status:`, response.status);
+      
+      if (!response.ok) {
+        let errorMessage = `Failed to add question ${index + 1} to game`;
+        
+        try {
+          const errorData = await response.json();
+          console.log(`Question ${index + 1} error response:`, errorData);
+          
+          if (errorData.message) {
+            errorMessage = errorData.message;
+          } else if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (e) {
+          console.log(`Could not parse error response for question ${index + 1}`);
+          errorMessage = response.statusText || `HTTP ${response.status} error`;
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      const result = await response.json();
+      console.log(`Question ${index + 1} added successfully:`, result);
+    }
+    
+    console.log(`Successfully added ${questions.length} questions to game ${gameId}`);
+    return { success: true, questionsAdded: questions.length };
+  };
+
   const handleClearAll = () => {
     Alert.alert(
       'Clear All',
@@ -266,6 +383,7 @@ const handleGenerateQuestions = async () => {
     return (
       <MyGamesScreen 
         onBack={() => setShowMyGames(false)} 
+        onNavigateToAddQuestions={handleNavigateToAddQuestions}
       />
     );
   }
@@ -312,6 +430,15 @@ const handleGenerateQuestions = async () => {
           >
             <Text style={styles.myGamesButtonText}>📚 My Games</Text>
           </TouchableOpacity>
+          
+          {/* Editing Game Indicator */}
+          {editingGameData && (
+            <View style={styles.editingGameIndicator}>
+              <Text style={styles.editingGameLabel}>Currently Editing:</Text>
+              <Text style={styles.editingGameName}>"{editingGameData.title}"</Text>
+              <Text style={styles.editingGameHint}>Generate questions to add to this game</Text>
+            </View>
+          )}
         </View>
 
         {/* Prompt Input Section */}
@@ -1017,6 +1144,47 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  
+  // Editing Game Indicator styles
+  editingGameIndicator: {
+    backgroundColor: '#FF9800',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 15,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  
+  editingGameLabel: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  
+  editingGameName: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  
+  editingGameHint: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 

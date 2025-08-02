@@ -17,9 +17,11 @@ import { StatusBar } from 'expo-status-bar';
 import authService from '../../services/auth/authService';
 import { Colors } from '../../constants/colors';
 import Spinner from '../../components/ui/Spinner';
+import WinnersSection from '../../components/WinnersSection';
 
 interface MyGamesScreenProps {
   onBack: () => void;
+  onNavigateToAddQuestions?: (gameData: GameData) => void;
 }
 
 interface GameData {
@@ -46,7 +48,7 @@ interface Question {
   createdAt?: string;
 }
 
-const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
+const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQuestions }) => {
   const [games, setGames] = useState<GameData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -143,20 +145,17 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
   };
 
   const handleEditGame = (game: GameData) => {
-    Alert.alert(
-      'Edit Game',
-      `Edit "${game.title}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Edit', 
-          onPress: () => {
-            // TODO: Navigate to edit screen or implement edit functionality
-            Alert.alert('Coming Soon', 'Edit functionality will be available in a future update.');
-          }
-        }
-      ]
-    );
+    // Always navigate to CreateGameScreen for editing, regardless of question count
+    if (onNavigateToAddQuestions) {
+      onNavigateToAddQuestions(game);
+    } else {
+      // Fallback if callback not provided
+      Alert.alert(
+        'Edit Game',
+        `Navigation to edit "${game.title}" is not available.`,
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const handleInviteGame = (game: GameData) => {
@@ -651,6 +650,16 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
                       {Number(game.questionsCount) || Number(game.questionCount) || 0}/{Number(game.maxQuestions) || 20} questions
                     </Text>
                   </View>
+                  
+                  {/* Winners Section */}
+                  <WinnersSection 
+                    gameId={game.id}
+                    onWinnersUpdate={(winners) => {
+                      console.log(`Winners updated for game ${game.id}:`, winners);
+                      // TODO: Save winners to backend or local state
+                    }}
+                    editable={true}
+                  />
                   
                   {/* Circular Radial Button Layout */}
                   <View style={styles.radialButtonsContainer}>

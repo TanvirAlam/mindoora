@@ -321,3 +321,24 @@ export const gameExperience = pgTable("gameExperience", {
   lavelOfFun: real("lavelOfFun").notNull(),
   createdAt: timestamp("createdAt").defaultNow(),
 });
+
+export const GameWinners = pgTable("GameWinners", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  gameId: uuid("gameId")
+    .notNull()
+    .references(() => UserGame.id, { onDelete: "cascade" }),
+  firstPlacePlayerId: uuid("firstPlacePlayerId")
+    .references(() => GamePlayers.id, { onDelete: "set null" }),
+  secondPlacePlayerId: uuid("secondPlacePlayerId")
+    .references(() => GamePlayers.id, { onDelete: "set null" }),
+  thirdPlacePlayerId: uuid("thirdPlacePlayerId")
+    .references(() => GamePlayers.id, { onDelete: "set null" }),
+  firstPlaceTrophy: varchar("firstPlaceTrophy"), // Trophy image URL/name for 1st place
+  secondPlaceTrophy: varchar("secondPlaceTrophy"), // Trophy image URL/name for 2nd place
+  thirdPlaceTrophy: varchar("thirdPlaceTrophy"), // Trophy image URL/name for 3rd place
+  firstPlacePoints: integer("firstPlacePoints").default(20), // 20/20 points for 1st place
+  secondPlacePoints: integer("secondPlacePoints").default(15), // 15/20 points for 2nd place
+  thirdPlacePoints: integer("thirdPlacePoints").default(10), // 10/20 points for 3rd place
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow(),
+});
