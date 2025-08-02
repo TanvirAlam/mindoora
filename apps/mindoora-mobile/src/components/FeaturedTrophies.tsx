@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { View, Text, StyleSheet, Image, TouchableOpacity, Animated, FlatList } from 'react-native'
+import TrophyModal from './TrophyModal'
 
 interface Trophy {
   id: string
@@ -56,6 +57,7 @@ const allTrophies: Trophy[] = [
 
 const FeaturedTrophies: React.FC<FeaturedTrophiesProps> = ({ onViewAll }) => {
   const [featuredTrophies, setFeaturedTrophies] = useState<Trophy[]>([])
+  const [showTrophyModal, setShowTrophyModal] = useState(false)
   const usedTrophyIdsRef = useRef<Set<string>>(new Set())
   const fadeAnims = useRef([new Animated.Value(1), new Animated.Value(1), new Animated.Value(1)]).current
   const scaleAnims = useRef([new Animated.Value(1), new Animated.Value(1), new Animated.Value(1)]).current
@@ -337,13 +339,17 @@ const FeaturedTrophies: React.FC<FeaturedTrophiesProps> = ({ onViewAll }) => {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>🏆 Featured Trophies</Text>
-        <TouchableOpacity onPress={onViewAll} style={styles.viewAllButton}>
-          <Text style={styles.viewAllText}>View All</Text>
-        </TouchableOpacity>
-      </View>
+    <>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>🏆 Featured Trophies</Text>
+          <TouchableOpacity 
+            onPress={() => setShowTrophyModal(true)} 
+            style={styles.viewAllButton}
+          >
+            <Text style={styles.viewAllText}>View All</Text>
+          </TouchableOpacity>
+        </View>
 
       <View style={styles.trophyRow}>
         {featuredTrophies.map((item, index) => {
@@ -371,6 +377,13 @@ const FeaturedTrophies: React.FC<FeaturedTrophiesProps> = ({ onViewAll }) => {
         })}
       </View>
     </View>
+    
+    {/* Trophy Modal */}
+    <TrophyModal 
+      visible={showTrophyModal} 
+      onClose={() => setShowTrophyModal(false)} 
+    />
+  </>
   )
 }
 
