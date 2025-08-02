@@ -504,36 +504,22 @@ Now generate ${count} questions about "${topic}":
    * Generate intelligent questions using advanced algorithms and local model inspiration
    */
   async generateIntelligentQuestions(topic, count, difficulty, focusArea, modelName) {
-    // Create a seed based on topic and model for consistent but varied generation
-    const seed = this.hashString(topic + modelName + difficulty);
-    
-    // Get base questions from our curated bank
-    const baseResult = this.generateFallbackQuestions(topic, count * 2, difficulty); // Get more than needed
-    const baseQuestions = baseResult.questions;
-    
-    // Apply intelligent variations based on model characteristics
     const questions = [];
     const variations = this.getModelVariations(modelName);
     
+    // Generate completely different questions using various strategies
     for (let i = 0; i < count; i++) {
-      const baseIndex = (parseInt(seed, 36) + i) % baseQuestions.length;
-      const baseQuestion = baseQuestions[baseIndex];
-      
-      // Apply intelligent transformations
-      const transformedQuestion = this.applyIntelligentTransformations(
-        baseQuestion, 
-        variations, 
-        difficulty, 
+      const questionStrategy = this.selectQuestionStrategy(i, topic, difficulty);
+      const generatedQuestion = await this.generateQuestionFromStrategy(
+        questionStrategy,
+        topic,
+        difficulty,
         focusArea,
-        i
+        variations,
+        i + 1
       );
       
-      questions.push({
-        ...transformedQuestion,
-        id: i + 1,
-        topic,
-        difficulty
-      });
+      questions.push(generatedQuestion);
     }
     
     return questions;
@@ -677,6 +663,608 @@ Now generate ${count} questions about "${topic}":
       default:
         return explanation;
     }
+  }
+
+  /**
+   * Create enrichment for questions to make them more realistic and contextual
+   */
+  createQuestionEnrichment(question, topic) {
+    const topicContexts = {
+      javascript: {
+        detailedTopics: [
+          'ES6+ Features and Modern JavaScript',
+          'Asynchronous Programming and Promises',
+          'DOM Manipulation and Events',
+          'JavaScript Frameworks and Libraries',
+          'Node.js Backend Development',
+          'Testing and Debugging Techniques'
+        ],
+        realLifeContexts: [
+          'Building a responsive web application',
+          'Optimizing code for performance',
+          'Handling user interactions in a web form',
+          'Creating a REST API with Node.js',
+          'Debugging a production website issue',
+          'Implementing authentication in a web app'
+        ]
+      },
+      python: {
+        detailedTopics: [
+          'Data Analysis with Pandas and NumPy',
+          'Web Development with Django/Flask',
+          'Machine Learning and AI',
+          'API Development and Integration',
+          'Database Operations with SQLAlchemy',
+          'Automation and Scripting'
+        ],
+        realLifeContexts: [
+          'Analyzing sales data for business insights',
+          'Building a machine learning model',
+          'Creating a web scraper for data collection',
+          'Automating repetitive office tasks',
+          'Processing large datasets efficiently',
+          'Building a chatbot with natural language processing'
+        ]
+      },
+      react: {
+        detailedTopics: [
+          'Component Lifecycle and Hooks',
+          'State Management with Redux/Context',
+          'Performance Optimization Techniques',
+          'Testing React Applications',
+          'Server-Side Rendering with Next.js',
+          'Mobile Development with React Native'
+        ],
+        realLifeContexts: [
+          'Building a social media dashboard',
+          'Creating an e-commerce product catalog',
+          'Developing a task management application',
+          'Building a real-time chat interface',
+          'Creating a data visualization dashboard',
+          'Developing a mobile app for iOS and Android'
+        ]
+      },
+      history: {
+        detailedTopics: [
+          'Ancient Civilizations and Empires',
+          'World Wars and Global Conflicts',
+          'Revolutionary Movements and Social Change',
+          'Economic Systems Throughout History',
+          'Cultural and Technological Advances',
+          'Political Systems and Governance'
+        ],
+        realLifeContexts: [
+          'Understanding current geopolitical situations',
+          'Analyzing patterns in economic development',
+          'Learning from past social movements',
+          'Understanding the roots of modern conflicts',
+          'Appreciating cultural heritage and traditions',
+          'Making informed decisions as a citizen'
+        ]
+      },
+      science: {
+        detailedTopics: [
+          'Physics and Natural Laws',
+          'Chemistry and Molecular Interactions',
+          'Biology and Life Sciences',
+          'Environmental Science and Sustainability',
+          'Space Science and Astronomy',
+          'Medical Science and Health'
+        ],
+        realLifeContexts: [
+          'Understanding climate change impacts',
+          'Making informed health decisions',
+          'Appreciating technological innovations',
+          'Supporting environmental conservation',
+          'Understanding medical treatments',
+          'Exploring space exploration achievements'
+        ]
+      }
+    };
+
+    const topicKey = topic.toLowerCase();
+    const contexts = topicContexts[topicKey] || {
+      detailedTopics: [`Advanced ${topic} Concepts`, `Practical ${topic} Applications`],
+      realLifeContexts: [`Applying ${topic} in professional settings`, `Using ${topic} for problem-solving`]
+    };
+
+    // Select random detailed topic and real-life context
+    const randomDetailedTopic = contexts.detailedTopics[Math.floor(Math.random() * contexts.detailedTopics.length)];
+    const randomRealLifeContext = contexts.realLifeContexts[Math.floor(Math.random() * contexts.realLifeContexts.length)];
+
+    return {
+      detailedTopic: randomDetailedTopic,
+      realLifeContext: randomRealLifeContext
+    };
+  }
+
+  /**
+   * Select a question generation strategy based on index and topic
+   */
+  selectQuestionStrategy(index, topic, difficulty) {
+    const strategies = [
+      'conceptual',     // Basic concept understanding
+      'practical',      // Real-world application
+      'comparative',    // Compare and contrast
+      'scenario',       // Problem-solving scenario
+      'analytical',     // Analysis and reasoning
+      'syntax',         // Code/syntax specific (for programming)
+      'historical',     // Historical or background context
+      'best-practice'   // Best practices and conventions
+    ];
+    
+    return strategies[index % strategies.length];
+  }
+
+  /**
+   * Generate a question based on selected strategy
+   */
+  async generateQuestionFromStrategy(strategy, topic, difficulty, focusArea, variations, questionId) {
+    const generators = {
+      'conceptual': () => this.generateConceptualQuestion(topic, difficulty, questionId),
+      'practical': () => this.generatePracticalQuestion(topic, difficulty, questionId),
+      'comparative': () => this.generateComparativeQuestion(topic, difficulty, questionId),
+      'scenario': () => this.generateScenarioQuestion(topic, difficulty, questionId),
+      'analytical': () => this.generateAnalyticalQuestion(topic, difficulty, questionId),
+      'syntax': () => this.generateSyntaxQuestion(topic, difficulty, questionId),
+      'historical': () => this.generateHistoricalQuestion(topic, difficulty, questionId),
+      'best-practice': () => this.generateBestPracticeQuestion(topic, difficulty, questionId)
+    };
+
+    const generator = generators[strategy] || generators['conceptual'];
+    let question = generator();
+    
+    // Apply model-specific enhancements
+    question.explanation = this.enhanceExplanation(question.explanation, variations.explanationStyle);
+    
+    return question;
+  }
+
+  /**
+   * Generate conceptual understanding questions
+   */
+  generateConceptualQuestion(topic, difficulty, questionId) {
+    const templates = this.getConceptualTemplates(topic);
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    
+    return {
+      id: questionId,
+      question: template.question,
+      options: template.options,
+      correctAnswer: template.correctAnswer,
+      explanation: template.explanation,
+      difficulty,
+      topic,
+      category: 'conceptual'
+    };
+  }
+
+  /**
+   * Generate practical application questions
+   */
+  generatePracticalQuestion(topic, difficulty, questionId) {
+    const templates = this.getPracticalTemplates(topic);
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    
+    return {
+      id: questionId,
+      question: `In a real project, ${template.question}`,
+      options: template.options,
+      correctAnswer: template.correctAnswer,
+      explanation: `Practical consideration: ${template.explanation}`,
+      difficulty,
+      topic,
+      category: 'practical'
+    };
+  }
+
+  /**
+   * Generate comparative questions
+   */
+  generateComparativeQuestion(topic, difficulty, questionId) {
+    const templates = this.getComparativeTemplates(topic);
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    
+    return {
+      id: questionId,
+      question: `What is the main difference between ${template.question}?`,
+      options: template.options,
+      correctAnswer: template.correctAnswer,
+      explanation: `Key distinction: ${template.explanation}`,
+      difficulty,
+      topic,
+      category: 'comparative'
+    };
+  }
+
+  /**
+   * Generate scenario-based questions
+   */
+  generateScenarioQuestion(topic, difficulty, questionId) {
+    const templates = this.getScenarioTemplates(topic);
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    
+    return {
+      id: questionId,
+      question: `Scenario: ${template.scenario} ${template.question}`,
+      options: template.options,
+      correctAnswer: template.correctAnswer,
+      explanation: `Solution approach: ${template.explanation}`,
+      difficulty,
+      topic,
+      category: 'scenario'
+    };
+  }
+
+  /**
+   * Generate analytical questions
+   */
+  generateAnalyticalQuestion(topic, difficulty, questionId) {
+    const templates = this.getAnalyticalTemplates(topic);
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    
+    return {
+      id: questionId,
+      question: `Analyze this: ${template.question}`,
+      options: template.options,
+      correctAnswer: template.correctAnswer,
+      explanation: `Analysis: ${template.explanation}`,
+      difficulty,
+      topic,
+      category: 'analytical'
+    };
+  }
+
+  /**
+   * Generate syntax-specific questions
+   */
+  generateSyntaxQuestion(topic, difficulty, questionId) {
+    const templates = this.getSyntaxTemplates(topic);
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    
+    return {
+      id: questionId,
+      question: template.question,
+      options: template.options,
+      correctAnswer: template.correctAnswer,
+      explanation: `Syntax rule: ${template.explanation}`,
+      difficulty,
+      topic,
+      category: 'syntax'
+    };
+  }
+
+  /**
+   * Generate historical/background questions
+   */
+  generateHistoricalQuestion(topic, difficulty, questionId) {
+    const templates = this.getHistoricalTemplates(topic);
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    
+    return {
+      id: questionId,
+      question: template.question,
+      options: template.options,
+      correctAnswer: template.correctAnswer,
+      explanation: `Background: ${template.explanation}`,
+      difficulty,
+      topic,
+      category: 'historical'
+    };
+  }
+
+  /**
+   * Generate best practice questions
+   */
+  generateBestPracticeQuestion(topic, difficulty, questionId) {
+    const templates = this.getBestPracticeTemplates(topic);
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    
+    return {
+      id: questionId,
+      question: `What is the recommended approach for ${template.question}?`,
+      options: template.options,
+      correctAnswer: template.correctAnswer,
+      explanation: `Best practice: ${template.explanation}`,
+      difficulty,
+      topic,
+      category: 'best-practice'
+    };
+  }
+
+  /**
+   * Get conceptual question templates by topic
+   */
+  getConceptualTemplates(topic) {
+    const templates = {
+      javascript: [
+        {
+          question: "What is the fundamental purpose of closures in JavaScript?",
+          options: {
+            A: "To create private variables",
+            B: "To enable data encapsulation and maintain state",
+            C: "To improve performance",
+            D: "To handle errors"
+          },
+          correctAnswer: "B",
+          explanation: "Closures provide a way to create private scope and maintain state between function calls, enabling powerful patterns like modules and factories."
+        },
+        {
+          question: "What makes JavaScript's event loop unique?",
+          options: {
+            A: "It handles multiple threads simultaneously",
+            B: "It processes tasks in a single-threaded, non-blocking manner",
+            C: "It prevents all asynchronous operations",
+            D: "It only works with DOM events"
+          },
+          correctAnswer: "B",
+          explanation: "JavaScript's event loop enables non-blocking I/O operations in a single-threaded environment by using a callback queue and call stack mechanism."
+        }
+      ],
+      python: [
+        {
+          question: "What is the core philosophy behind Python's design?",
+          options: {
+            A: "Explicit is better than implicit",
+            B: "Performance over readability",
+            C: "Complex is better than simple",
+            D: "Hidden is better than obvious"
+          },
+          correctAnswer: "A",
+          explanation: "The Zen of Python emphasizes clarity and explicitness, making code more readable and maintainable."
+        }
+      ],
+      react: [
+        {
+          question: "What is the primary benefit of React's virtual DOM?",
+          options: {
+            A: "It makes websites load faster",
+            B: "It optimizes DOM updates by batching and diffing changes",
+            C: "It replaces HTML completely",
+            D: "It eliminates the need for CSS"
+          },
+          correctAnswer: "B",
+          explanation: "The virtual DOM allows React to minimize expensive DOM operations by calculating the most efficient way to update the UI."
+        }
+      ]
+    };
+    
+    return templates[topic.toLowerCase()] || [{
+      question: `What is a key principle of ${topic}?`,
+      options: {
+        A: `Core concept A of ${topic}`,
+        B: `Fundamental principle B of ${topic}`,
+        C: `Basic idea C of ${topic}`,
+        D: `Essential element D of ${topic}`
+      },
+      correctAnswer: "B",
+      explanation: `This represents a fundamental principle that guides ${topic} development and usage.`
+    }];
+  }
+
+  /**
+   * Get practical question templates by topic
+   */
+  getPracticalTemplates(topic) {
+    const templates = {
+      javascript: [
+        {
+          question: "which approach should you use to handle API calls that might fail?",
+          options: {
+            A: "Use synchronous fetch() without error handling",
+            B: "Implement try-catch with async/await or .catch() with promises",
+            C: "Ignore potential errors",
+            D: "Use setTimeout to retry indefinitely"
+          },
+          correctAnswer: "B",
+          explanation: "Proper error handling with try-catch or .catch() ensures your application gracefully handles network failures and provides user feedback."
+        },
+        {
+          question: "how would you optimize a React component that re-renders frequently?",
+          options: {
+            A: "Add more state variables",
+            B: "Use React.memo() and optimize dependencies",
+            C: "Remove all props",
+            D: "Convert to class component"
+          },
+          correctAnswer: "B",
+          explanation: "React.memo() prevents unnecessary re-renders by only re-rendering when props actually change, significantly improving performance."
+        }
+      ],
+      python: [
+        {
+          question: "how should you handle file operations to prevent resource leaks?",
+          options: {
+            A: "Always use open() without closing",
+            B: "Use 'with' statement for automatic resource management",
+            C: "Manually call close() sometimes",
+            D: "Let Python handle it automatically"
+          },
+          correctAnswer: "B",
+          explanation: "The 'with' statement ensures files are properly closed even if exceptions occur, preventing resource leaks and corruption."
+        }
+      ]
+    };
+    
+    return templates[topic.toLowerCase()] || [{
+      question: `what is the best way to implement ${topic} in production?`,
+      options: {
+        A: `Quick and simple approach`,
+        B: `Robust, scalable, and maintainable solution`,
+        C: `Minimum viable implementation`,
+        D: `Copy-paste from tutorials`
+      },
+      correctAnswer: "B",
+      explanation: `Production ${topic} implementations should prioritize reliability, scalability, and maintainability over quick fixes.`
+    }];
+  }
+
+  /**
+   * Get comparative question templates by topic
+   */
+  getComparativeTemplates(topic) {
+    const templates = {
+      javascript: [
+        {
+          question: "let, const, and var for variable declaration",
+          options: {
+            A: "They all have the same scope rules",
+            B: "let and const have block scope, var has function scope; const is immutable after assignment",
+            C: "Only var can be reassigned",
+            D: "const variables can be changed anytime"
+          },
+          correctAnswer: "B",
+          explanation: "let and const introduced block scoping in ES6, while const prevents reassignment of the variable binding (though objects can still be mutated)."
+        }
+      ],
+      python: [
+        {
+          question: "lists and tuples in Python",
+          options: {
+            A: "Lists are immutable, tuples are mutable",
+            B: "Lists are mutable and use [], tuples are immutable and use ()",
+            C: "They are exactly the same",
+            D: "Tuples can only store numbers"
+          },
+          correctAnswer: "B",
+          explanation: "Lists are mutable sequences that can be changed after creation, while tuples are immutable sequences that cannot be modified."
+        }
+      ]
+    };
+    
+    return templates[topic.toLowerCase()] || [{
+      question: `approach A and approach B in ${topic}`,
+      options: {
+        A: `They serve completely different purposes`,
+        B: `Approach A is faster, approach B is more flexible`,
+        C: `They are identical in functionality`,
+        D: `Approach B is always better`
+      },
+      correctAnswer: "B",
+      explanation: `Different approaches in ${topic} typically involve trade-offs between performance, flexibility, and complexity.`
+    }];
+  }
+
+  /**
+   * Get scenario question templates by topic
+   */
+  getScenarioTemplates(topic) {
+    const templates = {
+      javascript: [
+        {
+          scenario: "You're building an e-commerce site and need to handle user authentication.",
+          question: "What's the most secure approach for storing user sessions?",
+          options: {
+            A: "Store passwords in localStorage",
+            B: "Use JWT tokens with secure, httpOnly cookies",
+            C: "Keep everything in sessionStorage",
+            D: "Store credentials in URL parameters"
+          },
+          correctAnswer: "B",
+          explanation: "JWT tokens in httpOnly cookies prevent XSS attacks while maintaining stateless authentication that scales well."
+        }
+      ],
+      python: [
+        {
+          scenario: "You need to process 1 million records from a database efficiently.",
+          question: "Which approach would be most memory-efficient?",
+          options: {
+            A: "Load all records into a list at once",
+            B: "Use generators or iterators to process records one at a time",
+            C: "Convert everything to strings first",
+            D: "Load records into multiple lists"
+          },
+          correctAnswer: "B",
+          explanation: "Generators provide lazy evaluation, processing one record at a time without loading everything into memory."
+        }
+      ]
+    };
+    
+    return templates[topic.toLowerCase()] || [{
+      scenario: `You're working on a ${topic} project with strict deadlines.`,
+      question: `What should be your priority?`,
+      options: {
+        A: `Rush to complete without testing`,
+        B: `Balance functionality, quality, and timeline effectively`,
+        C: `Focus only on advanced features`,
+        D: `Skip documentation entirely`
+      },
+      correctAnswer: "B",
+      explanation: `Successful ${topic} projects require balancing multiple factors to deliver value while maintaining quality.`
+    }];
+  }
+
+  /**
+   * Get additional template methods for other question types
+   */
+  getAnalyticalTemplates(topic) {
+    return [{
+      question: `What would be the performance impact of this ${topic} approach?`,
+      options: {
+        A: `No impact on performance`,
+        B: `Significant performance improvement with trade-offs in complexity`,
+        C: `Only affects memory usage`,
+        D: `Makes everything slower`
+      },
+      correctAnswer: "B",
+      explanation: `Performance optimizations in ${topic} typically involve analyzing trade-offs between speed, memory, and code complexity.`
+    }];
+  }
+
+  getSyntaxTemplates(topic) {
+    const templates = {
+      javascript: [{
+        question: "What's the correct syntax for destructuring an object property with a default value?",
+        options: {
+          A: "const {name = 'default'} = obj;",
+          B: "const {name || 'default'} = obj;",
+          C: "const name = obj.name = 'default';",
+          D: "const {name: 'default'} = obj;"
+        },
+        correctAnswer: "A",
+        explanation: "Destructuring with default values uses the = operator within the destructuring pattern."
+      }]
+    };
+    
+    return templates[topic.toLowerCase()] || [{
+      question: `What is the correct syntax for ${topic}?`,
+      options: {
+        A: `Syntax option A`,
+        B: `Correct syntax pattern`,
+        C: `Invalid syntax option`,
+        D: `Deprecated syntax`
+      },
+      correctAnswer: "B",
+      explanation: `This represents the standard, recommended syntax for ${topic}.`
+    }];
+  }
+
+  getHistoricalTemplates(topic) {
+    return [{
+      question: `How has ${topic} evolved over time?`,
+      options: {
+        A: `It has remained completely unchanged`,
+        B: `Continuous evolution with new features and improvements`,
+        C: `Only minor cosmetic changes`,
+        D: `Became more complex without benefits`
+      },
+      correctAnswer: "B",
+      explanation: `${topic} has evolved significantly, incorporating community feedback and technological advances.`
+    }];
+  }
+
+  getBestPracticeTemplates(topic) {
+    return [{
+      question: `organizing and structuring ${topic} projects`,
+      options: {
+        A: `Put everything in one large file`,
+        B: `Follow established patterns with clear separation of concerns`,
+        C: `Use random organization`,
+        D: `Copy someone else's structure exactly`
+      },
+      correctAnswer: "B",
+      explanation: `Best practices in ${topic} emphasize maintainable code organization, clear naming conventions, and separation of concerns.`
+    }];
   }
 
   /**

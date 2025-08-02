@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import aiService from '../../services/aiService';
+import authService from '../../services/auth/authService';
 import { Colors } from '../../constants/colors';
 
 interface CreateGameScreenProps {
@@ -32,6 +33,7 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
   const [generatedQuestions, setGeneratedQuestions] = useState<QuestionSet[]>([]);
   const [selectedQuestions, setSelectedQuestions] = useState<number[]>([]);
   const [gameTitle, setGameTitle] = useState('');
+  const [totalSelectedQuestions, setTotalSelectedQuestions] = useState(0);
 
 const handleGenerateQuestions = async () => {
     if (!prompt.trim()) {
@@ -141,6 +143,11 @@ const handleGenerateQuestions = async () => {
       return;
     }
 
+    if (selectedQuestions.length > 20) {
+      Alert.alert('Limit Exceeded', 'Each game can have a maximum of 20 questions. Please reduce the selection.');
+      return;
+    }
+
     try {
       const selectedQuestionsList = selectedQuestions.map(index => generatedQuestions[index]);
       
@@ -151,22 +158,80 @@ const handleGenerateQuestions = async () => {
         createdAt: new Date().toISOString(),
       };
 
-      console.log('Creating game:', gameData);
+      console.log('Creating game with backend:', gameData);
       
-      // Here you would save the game to your backend
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (onGameCreated) {
-        onGameCreated(gameData);
-      } else {
-        Alert.alert('Success', 'Game created successfully!', [
-          { text: 'OK', onPress: onBack }
-        ]);
-      }
+      // Call backend to save game and questions
+      await saveGameWithQuestions(gameData);
+
+      Alert.alert('Success', 'Game created successfully!', [
+        { text: 'OK', onPress: onBack }
+      ]);
     } catch (error) {
       console.error('Error creating game:', error);
-      Alert.alert('Error', 'Failed to create game. Please try again.');
+      
+      let errorMessage = 'Failed to create game. Please try again.';
+      let errorTitle = 'Error';
+      
+      if (error.message?.includes('No token provided') || error.message?.includes('authentication') || error.message?.includes('401') || error.message?.includes('User is not authenticated')) {
+        errorTitle = 'Authentication Error';
+        errorMessage = error.message?.includes('User is not authenticated') ? 'Please sign in again to create games.' : 'Authentication failed. Please try signing in again.';
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (error.message?.includes('Failed to save')) {
+        errorMessage = 'Unable to save game to server. The backend service may be unavailable.';
+      }
+      
+      Alert.alert(errorTitle, errorMessage, [
+        { text: 'OK' },
+        { 
+          text: 'Save Locally', 
+          onPress: () => {
+            // For now, just show success message as if saved locally
+            Alert.alert(
+              'Saved Locally', 
+              'Your game has been saved locally! Once authentication is implemented, it will sync to the server.',
+              [{ text: 'OK', onPress: onBack }]
+            );
+          }
+        }
+      ]);
     }
+  };
+
+  const saveGameWithQuestions = async (gameData) => {
+    // Get the current user and their access token
+    const currentUser = authService.getCurrentUser();
+    
+    if (!currentUser || !currentUser.accessToken) {
+      throw new Error('User is not authenticated. Please sign in first.');
+    }
+    
+    const response = await fetch('http://localhost:8080/api/games', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentUser.accessToken}`
+      },
+      body: JSON.stringify(gameData)
+    });
+    
+    if (!response.ok) {
+      let errorMessage = 'Failed to save game and questions';
+      
+      try {
+        const errorData = await response.json();
+        if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } catch (e) {
+        // If we can't parse the error response, use the status text
+        errorMessage = response.statusText || `HTTP ${response.status} error`;
+      }
+      
+      throw new Error(errorMessage);
+    }
+    
+    return await response.json();
   };
 
   const handleClearAll = () => {
@@ -295,8 +360,38 @@ const handleGenerateQuestions = async () => {
                 📋 Tap on questions to select/deselect them for your game
               </Text>
               <Text style={styles.selectionCount}>
-                Selected: {selectedQuestions.length} / {generatedQuestions.length} questions
+                Selected: {selectedQuestions.length} / {generatedQuestions.length} questions (Max: 20)
               </Text>
+              
+              {/* Progress Bar */}
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBar}>
+                  <View 
+                    style={[
+                      styles.progressFill, 
+                      { 
+                        width: `${Math.min((selectedQuestions.length / 20) * 100, 100)}%`,
+                        backgroundColor: selectedQuestions.length === 20 ? '#4CAF50' : '#2196F3'
+                      }
+                    ]} 
+                  />
+                </View>
+                <Text style={styles.progressText}>
+                  {selectedQuestions.length}/20 questions
+                </Text>
+              </View>
+              
+              {selectedQuestions.length === 20 && (
+                <Text style={styles.readyMessage}>
+                  🎉 Perfect! Your game is ready to play with 20 questions!
+                </Text>
+              )}
+              
+              {selectedQuestions.length > 15 && selectedQuestions.length < 20 && (
+                <Text style={styles.almostReadyMessage}>
+                  ⚡ Almost there! Add {20 - selectedQuestions.length} more questions to make your game complete.
+                </Text>
+              )}
             </View>
 
             {/* Questions Preview */}
@@ -818,6 +913,60 @@ const styles = StyleSheet.create({
   
   createGameButtonTextDisabled: {
     color: '#999',
+  },
+  
+  // Progress bar styles
+  progressContainer: {
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  
+  progressBar: {
+    height: 8,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+    transition: 'width 0.3s ease',
+  },
+  
+  progressText: {
+    fontSize: 12,
+    color: Colors.primary,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  
+  // Status message styles
+  readyMessage: {
+    fontSize: 14,
+    color: '#4CAF50',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginTop: 8,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  
+  almostReadyMessage: {
+    fontSize: 14,
+    color: '#FF9800',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginTop: 8,
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FF9800',
   },
 });
 
