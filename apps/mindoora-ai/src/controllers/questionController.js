@@ -5,9 +5,9 @@ import logger from '../utils/logger.js';
 
 // Validation schemas
 const generateQuestionsSchema = Joi.object({
-  prompt: Joi.string().min(5).max(1000).required()
+  prompt: Joi.string().min(2).max(1000).required()
     .messages({
-      'string.min': 'Prompt must be at least 5 characters long',
+      'string.min': 'Prompt must be at least 2 characters long',
       'string.max': 'Prompt cannot exceed 1000 characters',
       'any.required': 'Prompt is required'
     }),
@@ -26,9 +26,9 @@ const generateQuestionsSchema = Joi.object({
     .messages({
       'any.only': 'Question types must be one of: multiple-choice, true-false, fill-blank, short-answer'
     }),
-  provider: Joi.string().valid('openai', 'huggingface', 'googleai').optional()
+  provider: Joi.string().valid('openai', 'huggingface', 'googleai', 't5').optional()
     .messages({
-      'any.only': 'Provider must be one of: openai, huggingface, googleai'
+      'any.only': 'Provider must be one of: openai, huggingface, googleai, t5'
     }),
   useCache: Joi.boolean().default(true),
 });

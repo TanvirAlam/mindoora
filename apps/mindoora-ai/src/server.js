@@ -137,7 +137,7 @@ const server = app.listen(config.port, async () => {
   // Import AI provider service to check available providers
   const aiProviderService = (await import('./services/aiProviderService.js')).default;
   
-  logger.info(`🚀 Emach AI Service started`, {
+  logger.info(`🚀 Mindoora AI Service started`, {
     port: config.port,
     environment: config.nodeEnv,
     providers: aiProviderService.getAvailableProviders(),

@@ -1,64 +1,51 @@
 /**
- * AI Service Client for Mindoora Mobile App
- * Communicates with the mindoora-ai microservice
+ * AI Service for Mindoora Mobile App
+ * Uses backend AI service (no external APIs or heavy models)
  */
-
-const AI_SERVICE_BASE_URL = 'http://localhost:3001'; // Change this to your deployed URL in production
 
 class AIService {
   constructor() {
-    this.baseURL = AI_SERVICE_BASE_URL;
-    this.timeout = 30000; // 30 seconds timeout
+    this.baseURL = 'http://localhost:3001'; // Backend AI service
+    this.timeout = 30000; // 30 seconds
   }
 
   /**
-   * Make HTTP request to AI service
+   * Make HTTP request to backend AI service
    */
-  async makeRequest(endpoint, options = {}) {
+  async makeRequest(endpoint, method = 'GET', body = null) {
     const url = `${this.baseURL}${endpoint}`;
     
-    const config = {
-      method: 'GET',
+    const options = {
+      method,
       headers: {
         'Content-Type': 'application/json',
-        // Add API key if you enable authentication
-        // 'X-API-Key': 'your-api-key-here',
       },
       timeout: this.timeout,
-      ...options,
     };
-
+    
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
+    
+    console.log(`[AIService] Making ${method} request to ${url}`);
+    
     try {
-      console.log(`[AIService] Making request to: ${url}`);
+      const response = await fetch(url, options);
       
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-      
-      const response = await fetch(url, {
-        ...config,
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
-
+      
       const data = await response.json();
-      console.log(`[AIService] Response received:`, data.success ? 'Success' : 'Failed');
+      console.log(`[AIService] Request successful:`, data.success ? 'Success' : 'Failed');
       
       return data;
     } catch (error) {
       console.error(`[AIService] Request failed:`, error.message);
       
-      if (error.name === 'AbortError') {
-        throw new Error('Request timeout - AI service is taking too long to respond');
-      }
-      
-      if (error.message.includes('Network request failed')) {
-        throw new Error('Cannot connect to AI service. Make sure the service is running on port 3001.');
+      if (error.message.includes('Network request failed') || error.message.includes('fetch')) {
+        throw new Error('Cannot connect to AI service. Make sure the backend is running on port 3001.');
       }
       
       throw error;
@@ -66,53 +53,156 @@ class AIService {
   }
 
   /**
-   * Generate quiz questions using AI
+   * Generate quiz questions using backend AI service
    */
   async generateQuestions(prompt, options = {}) {
     const {
       count = 5,
       difficulty = 'medium',
-      model = 'flan-t5-small',
-      focusArea = '',
     } = options;
 
+    console.log(`[AIService] Generating ${count} questions for: "${prompt}"`);
+    
+    if (!prompt || prompt.length < 2) {
+      throw new Error('Prompt is too short! Must be at least 2 characters.');
+    }
+
     try {
-      const response = await this.makeRequest('/api/local/generate', {
-        method: 'POST',
-        body: JSON.stringify({
-          prompt,
-          count,
-          difficulty,
-          model,
-          focusArea,
-        }),
+      // Call backend AI service
+      const response = await this.makeRequest('/api/questions/generate', 'POST', {
+        prompt,
+        count,
+        difficulty
       });
-
-      if (!response.success) {
-        throw new Error(response.message || 'Failed to generate questions');
+      
+      if (response.success && response.data && response.data.questions) {
+        console.log(`[AIService] Successfully generated ${response.data.questions.length} questions`);
+        return response;
+      } else {
+        throw new Error('Invalid response from AI service');
       }
-
-      return {
-        questions: response.data.questions || [],
-        metadata: response.data.metadata || {
-          generated_at: new Date().toISOString(),
-          count: 0,
-          provider: 'unknown',
-        },
-      };
+      
     } catch (error) {
       console.error('[AIService] Generate questions failed:', error);
       
-      // If the AI service fails, provide a fallback with demo questions
-      if (error.message.includes('Cannot connect to AI service') || 
-          error.message.includes('Network request failed') ||
-          error.message.includes('this.hf.textToText is not a function')) {
-        console.log('[AIService] Using fallback demo questions');
-        return this.generateFallbackQuestions(prompt, count, difficulty);
-      }
-      
-      throw error;
+      // Fallback to demo questions if backend fails
+      console.log('[AIService] Using fallback demo questions due to backend error');
+      return {
+        success: true,
+        data: this.generateFallbackQuestions(prompt, count, difficulty)
+      };
     }
+  }
+
+  /**
+   * Create a structured question from AI-generated content
+   */
+  createQuestionFromAI(generatedText, topic, questionNumber, difficulty) {
+    console.log(`[AIService] Processing AI text for question ${questionNumber}:`, generatedText);
+    
+    // Extract the first meaningful sentence as the question
+    let questionText = generatedText.split(/[.!?\n]/)[0].trim();
+    
+    // If the generated text doesn't end with a question mark, make it a question
+    if (!questionText.endsWith('?')) {
+      if (questionText.length > 10) {
+        questionText = questionText + '?';
+      } else {
+        questionText = `What is important about ${topic} in the following context: "${questionText}"?`;
+      }
+    }
+    
+    // Ensure minimum question length
+    if (questionText.length < 10) {
+      questionText = `What should you know about ${topic}?`;
+    }
+    
+    // Create contextual options based on the topic and generated content
+    const options = this.generateContextualOptions(topic, generatedText, questionNumber);
+    
+    // Rotate correct answers
+    const correctAnswers = ['A', 'B', 'C', 'D'];
+    const correctAnswer = correctAnswers[(questionNumber - 1) % 4];
+    
+    return {
+      id: questionNumber,
+      question: questionText,
+      options,
+      correctAnswer,
+      explanation: `This question tests knowledge about ${topic}. Generated from AI: "${generatedText.substring(0, 100)}..."`,
+      difficulty: difficulty,
+      topic: topic,
+      generated: true,
+      aiText: generatedText.substring(0, 200) // Keep reference to original AI text
+    };
+  }
+  
+  /**
+   * Generate contextual multiple choice options
+   */
+  generateContextualOptions(topic, generatedText, questionNumber) {
+    // Try to extract meaningful concepts from the AI text
+    const words = generatedText.toLowerCase().split(/\s+/).filter(word => word.length > 3);
+    const uniqueWords = [...new Set(words)].slice(0, 8);
+    
+    // Create topic-specific options
+    const baseOptions = {
+      A: `${topic} uses ${uniqueWords[0] || 'specific'} techniques`,
+      B: `${topic} involves ${uniqueWords[1] || 'important'} concepts`,
+      C: `${topic} requires ${uniqueWords[2] || 'fundamental'} understanding`,
+      D: `${topic} employs ${uniqueWords[3] || 'essential'} methods`
+    };
+    
+    // Mix in some generated content if available
+    if (generatedText.length > 20) {
+      const fragments = generatedText.split(/[,.!?]/).filter(f => f.trim().length > 5);
+      if (fragments.length > 0) {
+        baseOptions.A = fragments[0]?.trim().substring(0, 50) || baseOptions.A;
+      }
+      if (fragments.length > 1) {
+        baseOptions.B = fragments[1]?.trim().substring(0, 50) || baseOptions.B;
+      }
+    }
+    
+    return baseOptions;
+  }
+
+  /**
+   * Parse generated text into a structured question (legacy method)
+   */
+  parseGeneratedQuestion(generatedText, topic, questionNumber) {
+    return this.createQuestionFromAI(generatedText, topic, questionNumber, 'medium');
+  }
+
+  /**
+   * Create a single fallback question
+   */
+  createFallbackQuestion(prompt, questionNumber, difficulty) {
+    const questionTemplates = [
+      `What is the main concept related to "${prompt}"?`,
+      `Which of the following best describes "${prompt}"?`,
+      `What is an important aspect of "${prompt}"?`,
+      `How would you explain "${prompt}"?`,
+      `What should you know about "${prompt}"?`
+    ];
+    
+    const template = questionTemplates[(questionNumber - 1) % questionTemplates.length];
+    
+    return {
+      id: questionNumber,
+      question: template,
+      options: {
+        A: `First key point about ${prompt}`,
+        B: `Second important aspect of ${prompt}`,
+        C: `Third concept related to ${prompt}`, 
+        D: `Fourth element of ${prompt}`
+      },
+      correctAnswer: String.fromCharCode(65 + ((questionNumber - 1) % 4)), // A, B, C, D rotation
+      explanation: `This question covers fundamental concepts of ${prompt}.`,
+      difficulty: difficulty,
+      topic: prompt,
+      generated: false
+    };
   }
 
   /**
@@ -150,21 +240,30 @@ class AIService {
   }
 
   /**
-   * Get available AI models
+   * Get available AI providers
+   */
+  async getAvailableProviders() {
+    try {
+      const response = await this.makeRequest('/api/questions/providers', 'GET');
+      return response;
+    } catch (error) {
+      console.error('[AIService] Failed to get providers:', error);
+      return {
+        success: false,
+        data: {
+          providers: ['local'],
+          default: 'local',
+          fallback: 'local'
+        }
+      };
+    }
+  }
+
+  /**
+   * Get available AI models (legacy method for backward compatibility)
    */
   async getAvailableModels() {
-    try {
-      const response = await this.makeRequest('/api/local/models');
-      
-      if (!response.success) {
-        throw new Error(response.message || 'Failed to get models');
-      }
-
-      return response.data.models || {};
-    } catch (error) {
-      console.error('[AIService] Get models failed:', error);
-      throw error;
-    }
+    return await this.getAvailableProviders();
   }
 
   /**
@@ -172,19 +271,18 @@ class AIService {
    */
   async testConnection() {
     try {
-      const response = await this.makeRequest('/api/local/quick-test');
-      
+      const response = await this.makeRequest('/health', 'GET');
       return {
-        success: response.success,
-        message: response.message || 'Connection test completed',
-        data: response.data,
+        success: true,
+        message: 'Backend AI service is healthy and ready',
+        data: response.data
       };
     } catch (error) {
       console.error('[AIService] Connection test failed:', error);
       return {
         success: false,
-        message: error.message,
-        error: error,
+        message: 'Cannot connect to AI service. Make sure the backend is running on port 3001.',
+        error: error.message,
       };
     }
   }
@@ -194,11 +292,10 @@ class AIService {
    */
   async checkHealth() {
     try {
-      const response = await this.makeRequest('/health');
-      
+      const response = await this.makeRequest('/api/questions/health', 'GET');
       return {
         healthy: response.success,
-        data: response.data,
+        data: response.data
       };
     } catch (error) {
       console.error('[AIService] Health check failed:', error);
@@ -206,45 +303,6 @@ class AIService {
         healthy: false,
         error: error.message,
       };
-    }
-  }
-
-  /**
-   * Analyze content difficulty and suggest question types
-   */
-  async analyzeContent(text) {
-    try {
-      const response = await this.makeRequest('/api/questions/analyze', {
-        method: 'POST',
-        body: JSON.stringify({ text }),
-      });
-
-      if (!response.success) {
-        throw new Error(response.message || 'Failed to analyze content');
-      }
-
-      return response.data;
-    } catch (error) {
-      console.error('[AIService] Content analysis failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get service statistics
-   */
-  async getStats() {
-    try {
-      const response = await this.makeRequest('/api/questions/stats');
-      
-      if (!response.success) {
-        throw new Error(response.message || 'Failed to get stats');
-      }
-
-      return response.data;
-    } catch (error) {
-      console.error('[AIService] Get stats failed:', error);
-      throw error;
     }
   }
 }
