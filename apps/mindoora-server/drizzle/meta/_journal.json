@@ -15,6 +15,13 @@
       "when": 1753877974500,
       "tag": "0001_modern_ogun",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1754170106716,
+      "tag": "0002_white_living_tribunal",
+      "breakpoints": true
     }
   ]
 }

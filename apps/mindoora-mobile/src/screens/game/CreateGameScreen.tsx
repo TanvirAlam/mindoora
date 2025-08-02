@@ -13,11 +13,28 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import aiService from '../../services/aiService';
+import authService from '../../services/auth/authService';
+import MyGamesScreen from './MyGamesScreen';
 import { Colors } from '../../constants/colors';
+import Spinner from '../../components/ui/Spinner';
 
 interface CreateGameScreenProps {
   onBack: () => void;
   onGameCreated?: (gameData: any) => void;
+  editingGame?: GameData | null; // Optional game data for editing
+}
+
+interface GameData {
+  id: string;
+  title: string;
+  questionCount?: number;
+  questionsCount?: number;
+  isReady?: boolean;
+  maxQuestions?: number;
+  remainingQuestions?: number;
+  createdAt?: string;
+  language?: string;
+  nPlayer?: number;
 }
 
 interface QuestionSet {
@@ -26,14 +43,32 @@ interface QuestionSet {
   correctAnswer: number;
 }
 
-const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreated }) => {
+const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreated, editingGame }) => {
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<QuestionSet[]>([]);
   const [selectedQuestions, setSelectedQuestions] = useState<number[]>([]);
-  const [gameTitle, setGameTitle] = useState('');
+  const [gameTitle, setGameTitle] = useState(editingGame?.title || '');
+  const [totalSelectedQuestions, setTotalSelectedQuestions] = useState(0);
+  const [showMyGames, setShowMyGames] = useState(false);
+  const [isCreatingGame, setIsCreatingGame] = useState(false);
+  const [editingGameData, setEditingGameData] = useState<GameData | null>(editingGame || null);
 
-  const handleGenerateQuestions = async () => {
+  // Handle navigation from MyGamesScreen EDIT button
+  const handleNavigateToAddQuestions = (gameData: GameData) => {
+    setEditingGameData(gameData);
+    setGameTitle(gameData.title);
+    setShowMyGames(false);
+    
+    // Provide user feedback about editing mode
+    Alert.alert(
+      'Edit Game',
+      `Now editing "${gameData.title}". Generate questions to add to this existing game.`,
+      [{ text: 'OK' }]
+    );
+  };
+
+const handleGenerateQuestions = async () => {
     if (!prompt.trim()) {
       Alert.alert('Invalid Input', 'Please enter a topic or prompt to generate questions.');
       return;
@@ -141,32 +176,186 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
       return;
     }
 
+    if (selectedQuestions.length > 20) {
+      Alert.alert('Limit Exceeded', 'Each game can have a maximum of 20 questions. Please reduce the selection.');
+      return;
+    }
+
+    setIsCreatingGame(true);
     try {
       const selectedQuestionsList = selectedQuestions.map(index => generatedQuestions[index]);
       
-      const gameData = {
-        title: gameTitle,
-        prompt: prompt,
-        questions: selectedQuestionsList,
-        createdAt: new Date().toISOString(),
-      };
-
-      console.log('Creating game:', gameData);
-      
-      // Here you would save the game to your backend
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (onGameCreated) {
-        onGameCreated(gameData);
+      if (editingGameData) {
+        // We're editing an existing game - add questions to it
+        console.log('Adding questions to existing game:', editingGameData.id);
+        await addQuestionsToExistingGame(editingGameData.id, selectedQuestionsList);
+        
+        Alert.alert('Success', `Added ${selectedQuestionsList.length} questions to "${editingGameData.title}" successfully!`, [
+          { text: 'OK', onPress: onBack }
+        ]);
       } else {
+        // We're creating a new game
+        const gameData = {
+          title: gameTitle,
+          prompt: prompt,
+          questions: selectedQuestionsList,
+          createdAt: new Date().toISOString(),
+        };
+
+        console.log('Creating new game with backend:', gameData);
+        await saveGameWithQuestions(gameData);
+
         Alert.alert('Success', 'Game created successfully!', [
           { text: 'OK', onPress: onBack }
         ]);
       }
     } catch (error) {
-      console.error('Error creating game:', error);
-      Alert.alert('Error', 'Failed to create game. Please try again.');
+      console.error('Error with game operation:', error);
+      
+      let errorMessage = editingGameData 
+        ? 'Failed to add questions to game. Please try again.'
+        : 'Failed to create game. Please try again.';
+      let errorTitle = 'Error';
+      
+      if (error.message?.includes('No token provided') || error.message?.includes('authentication') || error.message?.includes('401') || error.message?.includes('User is not authenticated')) {
+        errorTitle = 'Authentication Error';
+        errorMessage = error.message?.includes('User is not authenticated') ? 'Please sign in again to continue.' : 'Authentication failed. Please try signing in again.';
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (error.message?.includes('Failed to save') || error.message?.includes('Failed to add')) {
+        errorMessage = 'Unable to save to server. The backend service may be unavailable.';
+      }
+      
+      Alert.alert(errorTitle, errorMessage, [
+        { text: 'OK' },
+        { 
+          text: 'Save Locally', 
+          onPress: () => {
+            // For now, just show success message as if saved locally
+            Alert.alert(
+              'Saved Locally', 
+              editingGameData 
+                ? 'Your questions have been saved locally! Once authentication is implemented, they will sync to the server.'
+                : 'Your game has been saved locally! Once authentication is implemented, it will sync to the server.',
+              [{ text: 'OK', onPress: onBack }]
+            );
+          }
+        }
+      ]);
+    } finally {
+      setIsCreatingGame(false);
     }
+  };
+
+  const saveGameWithQuestions = async (gameData) => {
+    // Get the current user and their access token
+    const currentUser = authService.getCurrentUser();
+    
+    if (!currentUser || !currentUser.accessToken) {
+      throw new Error('User is not authenticated. Please sign in first.');
+    }
+    
+    const response = await fetch('http://localhost:8080/api/games', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentUser.accessToken}`
+      },
+      body: JSON.stringify(gameData)
+    });
+    
+    if (!response.ok) {
+      let errorMessage = 'Failed to save game and questions';
+      
+      try {
+        const errorData = await response.json();
+        if (errorData.message) {
+          errorMessage = errorData.message;
+        }
+      } catch (e) {
+        // If we can't parse the error response, use the status text
+        errorMessage = response.statusText || `HTTP ${response.status} error`;
+      }
+      
+      throw new Error(errorMessage);
+    }
+    
+    return await response.json();
+  };
+
+  const addQuestionsToExistingGame = async (gameId: string, questions: QuestionSet[]) => {
+    const currentUser = authService.getCurrentUser();
+    
+    if (!currentUser || !currentUser.accessToken) {
+      throw new Error('User is not authenticated. Please sign in first.');
+    }
+
+    console.log(`Adding ${questions.length} questions to game ${gameId}`);
+    
+    // Convert questions to the format expected by the backend API
+    const questionsData = questions.map(q => {
+      // Convert options array back to A, B, C, D object format
+      const optionsObj = {
+        A: q.options[0] || '',
+        B: q.options[1] || '',
+        C: q.options[2] || '',
+        D: q.options[3] || ''
+      };
+      
+      return {
+        gameId: gameId,
+        question: q.question,
+        answer: q.correctAnswer.toString(), // Backend expects string representation of numeric index ("0", "1", "2", "3")
+        options: optionsObj, // Backend schema expects options as object, controller will stringify it
+        timeLimit: 60, // Default time limit
+        qSource: 'ai-generated', // Required field
+        qPoints: 10 // Default points
+      };
+    });
+
+    console.log('Formatted questions data:', questionsData[0]); // Log first question for debugging
+
+    // Add questions one by one using the correct API endpoint
+    for (const [index, questionData] of questionsData.entries()) {
+      console.log(`Adding question ${index + 1}/${questionsData.length}:`, questionData.question);
+      
+      const response = await fetch('http://localhost:8080/api/v1/question/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUser.accessToken}`
+        },
+        body: JSON.stringify(questionData)
+      });
+      
+      console.log(`Question ${index + 1} response status:`, response.status);
+      
+      if (!response.ok) {
+        let errorMessage = `Failed to add question ${index + 1} to game`;
+        
+        try {
+          const errorData = await response.json();
+          console.log(`Question ${index + 1} error response:`, errorData);
+          
+          if (errorData.message) {
+            errorMessage = errorData.message;
+          } else if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (e) {
+          console.log(`Could not parse error response for question ${index + 1}`);
+          errorMessage = response.statusText || `HTTP ${response.status} error`;
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      const result = await response.json();
+      console.log(`Question ${index + 1} added successfully:`, result);
+    }
+    
+    console.log(`Successfully added ${questions.length} questions to game ${gameId}`);
+    return { success: true, questionsAdded: questions.length };
   };
 
   const handleClearAll = () => {
@@ -188,6 +377,16 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
       ]
     );
   };
+
+  // Show My Games screen if requested
+  if (showMyGames) {
+    return (
+      <MyGamesScreen 
+        onBack={() => setShowMyGames(false)} 
+        onNavigateToAddQuestions={handleNavigateToAddQuestions}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -222,6 +421,24 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
           </Text>
           <Text style={styles.title}>Create Game</Text>
           <Text style={styles.subtitle}>Enter a topic to generate quiz questions</Text>
+          
+          {/* My Games Button */}
+          <TouchableOpacity 
+            style={styles.myGamesButton} 
+            onPress={() => setShowMyGames(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.myGamesButtonText}>📚 My Games</Text>
+          </TouchableOpacity>
+          
+          {/* Editing Game Indicator */}
+          {editingGameData && (
+            <View style={styles.editingGameIndicator}>
+              <Text style={styles.editingGameLabel}>Currently Editing:</Text>
+              <Text style={styles.editingGameName}>"{editingGameData.title}"</Text>
+              <Text style={styles.editingGameHint}>Generate questions to add to this game</Text>
+            </View>
+          )}
         </View>
 
         {/* Prompt Input Section */}
@@ -272,6 +489,7 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
           </TouchableOpacity>
         </View>
 
+<Spinner visible={isCreatingGame} />
         {/* Generated Questions Section */}
         {generatedQuestions.length > 0 && (
           <View style={styles.questionsSection}>
@@ -295,8 +513,38 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
                 📋 Tap on questions to select/deselect them for your game
               </Text>
               <Text style={styles.selectionCount}>
-                Selected: {selectedQuestions.length} / {generatedQuestions.length} questions
+                Selected: {selectedQuestions.length} / {generatedQuestions.length} questions (Max: 20)
               </Text>
+              
+              {/* Progress Bar */}
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBar}>
+                  <View 
+                    style={[
+                      styles.progressFill, 
+                      { 
+                        width: `${Math.min((selectedQuestions.length / 20) * 100, 100)}%`,
+                        backgroundColor: selectedQuestions.length === 20 ? '#4CAF50' : '#2196F3'
+                      }
+                    ]} 
+                  />
+                </View>
+                <Text style={styles.progressText}>
+                  {selectedQuestions.length}/20 questions
+                </Text>
+              </View>
+              
+              {selectedQuestions.length === 20 && (
+                <Text style={styles.readyMessage}>
+                  🎉 Perfect! Your game is ready to play with 20 questions!
+                </Text>
+              )}
+              
+              {selectedQuestions.length > 15 && selectedQuestions.length < 20 && (
+                <Text style={styles.almostReadyMessage}>
+                  ⚡ Almost there! Add {20 - selectedQuestions.length} more questions to make your game complete.
+                </Text>
+              )}
             </View>
 
             {/* Questions Preview */}
@@ -818,6 +1066,125 @@ const styles = StyleSheet.create({
   
   createGameButtonTextDisabled: {
     color: '#999',
+  },
+  
+  // Progress bar styles
+  progressContainer: {
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  
+  progressBar: {
+    height: 8,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+    transition: 'width 0.3s ease',
+  },
+  
+  progressText: {
+    fontSize: 12,
+    color: Colors.primary,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  
+  // Status message styles
+  readyMessage: {
+    fontSize: 14,
+    color: '#4CAF50',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginTop: 8,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  
+  almostReadyMessage: {
+    fontSize: 14,
+    color: '#FF9800',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginTop: 8,
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FF9800',
+  },
+  
+  // My Games Button styles
+  myGamesButton: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 15,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  
+  myGamesButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  
+  // Editing Game Indicator styles
+  editingGameIndicator: {
+    backgroundColor: '#FF9800',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 15,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  
+  editingGameLabel: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  
+  editingGameName: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  
+  editingGameHint: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 

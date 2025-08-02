@@ -22,7 +22,7 @@ export const createQuestionController = async (req: Request<{}, {}, createQuesti
     if(await findDuplicate( 'questions', { gameId, question}, res)) return;
 
     const newQuestionResult = await pool.query(
-      'INSERT INTO questions ("gameId", question, answer, options, "timeLimit", "qSource", "qImage", "qPoints", "qTrophy") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+      'INSERT INTO "Questions" ("gameId", question, answer, options, "timeLimit", "qSource", "qImage", "qPoints", "qTrophy") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
       [gameId, question, +answer, options, timeLimit, qSource, qImage, qPoints, qTrophy]
     )
     const newQuestion = newQuestionResult.rows[0]
@@ -38,7 +38,7 @@ export const deleteQuestionController = async (req: Request, res: Response) => {
     if(missingParams({id}, res)) return;
 
     const getQuestionResult = await pool.query(
-      'SELECT * FROM questions WHERE id = $1',
+      'SELECT * FROM "Questions" WHERE id = $1',
       [id]
     )
     const getQuestion = getQuestionResult.rows[0]
@@ -49,7 +49,7 @@ export const deleteQuestionController = async (req: Request, res: Response) => {
     if(await userAccess('userGame', {id: getQuestion.gameId}, res) === null) return;
 
     await pool.query(
-      'DELETE FROM questions WHERE id = $1',
+      'DELETE FROM "Questions" WHERE id = $1',
       [id]
     )
     return res.status(204).json({ message: 'Question deleted successfully' })
@@ -66,7 +66,7 @@ export const getAllQuestionController = async (req: Request, res: Response) => {
     if(await userAccess('userGame', {id: gameId}, res) === null) return;
 
     const allQuestionResult = await pool.query(
-      'SELECT * FROM questions WHERE "gameId" = $1',
+      'SELECT * FROM "Questions" WHERE "gameId" = $1',
       [gameId]
     )
     const allQuestion = allQuestionResult.rows
@@ -97,7 +97,7 @@ export const updateQuestionController = async (req: Request<{}, {}, updateQuesti
     updateQuestionSchema.parse(req.body)
 
     const findQuestionResult = await pool.query(
-      'SELECT * FROM questions WHERE id = $1',
+      'SELECT * FROM "Questions" WHERE id = $1',
       [id]
     )
     const findQuestion = findQuestionResult.rows[0]
@@ -108,7 +108,7 @@ export const updateQuestionController = async (req: Request<{}, {}, updateQuesti
     if(await userAccess('userGame', {id: findQuestion.gameId}, res) === null) return;
 
     const updateQuestionResult = await pool.query(
-      'UPDATE questions SET question = $1, answer = $2, options = $3, "timeLimit" = $4, "qSource" = $5, "qImage" = $6, "qPoints" = $7, "qTrophy" = $8 WHERE id = $9 RETURNING *',
+      'UPDATE "Questions" SET question = $1, answer = $2, options = $3, "timeLimit" = $4, "qSource" = $5, "qImage" = $6, "qPoints" = $7, "qTrophy" = $8 WHERE id = $9 RETURNING *',
       [question, +answer, options, timeLimit, qSource, qImage, qPoints, qTrophy, id]
     )
     const updateQuestion = updateQuestionResult.rows[0]
@@ -125,7 +125,7 @@ export const getOneQuestionController = async (req: Request, res: Response) => {
     if(missingParams({id}, res)) return;
 
     const getQuestionResult = await pool.query(
-      'SELECT * FROM questions WHERE id = $1',
+      'SELECT * FROM "Questions" WHERE id = $1',
       [id]
     )
     const getQuestion = getQuestionResult.rows[0]

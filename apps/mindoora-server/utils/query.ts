@@ -205,7 +205,7 @@ export const userQueries = {
   // User profile queries
   getUserByRegisterId: async (registerId: string) => {
     const result = await pool.query(
-      'SELECT id, name, image FROM "user" WHERE registerId = $1',
+      'SELECT id, name, image FROM "User" WHERE "registerId" = $1',
       [registerId]
     );
     return result.rows[0];
@@ -213,7 +213,7 @@ export const userQueries = {
 
   getAllUsers: async (offset: number, limit: number = 25) => {
     const result = await pool.query(
-      'SELECT * FROM "user" OFFSET $1 LIMIT $2',
+      'SELECT * FROM "User" OFFSET $1 LIMIT $2',
       [offset, limit]
     );
     return result.rows;
@@ -221,7 +221,7 @@ export const userQueries = {
 
   getUserByName: async (name: string) => {
     const result = await pool.query(
-      'SELECT name FROM "user" WHERE id = $1',
+      'SELECT name FROM "User" WHERE id = $1',
       [name]
     );
     return result.rows[0];
@@ -236,7 +236,7 @@ export const gameQueries = {
   // User Game queries
   createUserGame: async (title: string, language: string, nPlayer: number, userId: string) => {
     const result = await pool.query(
-      'INSERT INTO "userGame" (title, language, "nPlayer", "user") VALUES ($1, $2, $3, $4) RETURNING *',
+      'INSERT INTO "UserGame" (title, language, "nPlayer", "user") VALUES ($1, $2, $3, $4) RETURNING *',
       [title, language, nPlayer, userId]
     );
     return result.rows[0];
@@ -244,14 +244,14 @@ export const gameQueries = {
 
   deleteUserGame: async (gameId: string) => {
     await pool.query(
-      'DELETE FROM "userGame" WHERE id = $1',
+      'DELETE FROM "UserGame" WHERE id = $1',
       [gameId]
     );
   },
 
   findGameById: async (gameId: string) => {
     const result = await pool.query(
-      'SELECT * FROM userGame WHERE id = $1',
+      'SELECT * FROM "UserGame" WHERE id = $1',
       [gameId]
     );
     return result.rows[0];
@@ -259,7 +259,7 @@ export const gameQueries = {
 
   updateUserGame: async (title: string, language: string, nPlayer: number, gameId: string) => {
     const result = await pool.query(
-      'UPDATE "userGame" SET title = $1, language = $2, "nPlayer" = $3 WHERE id = $4 RETURNING *',
+      'UPDATE "UserGame" SET title = $1, language = $2, "nPlayer" = $3 WHERE id = $4 RETURNING *',
       [title, language, nPlayer, gameId]
     );
     return result.rows[0];
@@ -268,7 +268,7 @@ export const gameQueries = {
   // Game Details queries
   getGameDetails: async (gameId: string) => {
     const result = await pool.query(
-      'SELECT * FROM "userGameDetails" WHERE "gameId" = $1',
+      'SELECT * FROM "UserGameDetails" WHERE "gameId" = $1',
       [gameId]
     );
     return result.rows[0];
@@ -276,7 +276,7 @@ export const gameQueries = {
 
   createGameDetails: async (gameId: string, imgUrl: string, description: string, isPublic: boolean, category: string, theme: string, keyWords: string[]) => {
     const result = await pool.query(
-      'INSERT INTO "userGameDetails" ("gameId", "imgUrl", description, "isPublic", category, theme, "keyWords") VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      'INSERT INTO "UserGameDetails" ("gameId", "imgUrl", description, "isPublic", category, theme, "keyWords") VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
       [gameId, imgUrl, description, isPublic, category, theme, keyWords]
     );
     return result.rows[0];
@@ -284,7 +284,7 @@ export const gameQueries = {
 
   updateGameDetails: async (gameId: string, imgUrl: string, description: string, isPublic: boolean, category: string, theme: string, keyWords: string[]) => {
     const result = await pool.query(
-      'UPDATE "userGameDetails" SET "imgUrl" = $1, description = $2, "isPublic" = $3, category = $4, theme = $5, "keyWords" = $6 WHERE "gameId" = $7 RETURNING *',
+      'UPDATE "UserGameDetails" SET "imgUrl" = $1, description = $2, "isPublic" = $3, category = $4, theme = $5, "keyWords" = $6 WHERE "gameId" = $7 RETURNING *',
       [imgUrl, description, isPublic, category, theme, keyWords, gameId]
     );
     return result.rows[0];
@@ -292,7 +292,7 @@ export const gameQueries = {
 
   deleteGameDetails: async (gameId: string) => {
     await pool.query(
-      'DELETE FROM "userGameDetails" WHERE "gameId" = $1',
+      'DELETE FROM "UserGameDetails" WHERE "gameId" = $1',
       [gameId]
     );
   },
@@ -300,15 +300,15 @@ export const gameQueries = {
   // Public game queries
   getPublicGames: async () => {
     const result = await pool.query(
-      'SELECT ug.* FROM "userGame" ug JOIN "userGameDetails" ugd ON ug.id = ugd."gameId" WHERE ugd."isPublic" = true'
+      'SELECT ug.* FROM "UserGame" ug JOIN "UserGameDetails" ugd ON ug.id = ugd."gameId" WHERE ugd."isPublic" = true'
     );
     return result.rows;
   },
 
   getPublicGamesWithPagination: async (offset: number, category?: string) => {
     let query = `
-      SELECT ug.* FROM "userGame" ug 
-      JOIN "userGameDetails" ugd ON ug.id = ugd."gameId" 
+      SELECT ug.* FROM "UserGame" ug 
+      JOIN "UserGameDetails" ugd ON ug.id = ugd."gameId" 
       WHERE ugd."isPublic" = true
     `;
     const params = [];
@@ -327,7 +327,7 @@ export const gameQueries = {
 
   findPublicGameById: async (gameId: string) => {
     const result = await pool.query(
-      'SELECT ug.* FROM "userGame" ug JOIN "userGameDetails" ugd ON ug.id = ugd."gameId" WHERE ug.id = $1 AND ugd."isPublic" = true',
+      'SELECT ug.* FROM "UserGame" ug JOIN "UserGameDetails" ugd ON ug.id = ugd."gameId" WHERE ug.id = $1 AND ugd."isPublic" = true',
       [gameId]
     );
     return result.rows[0];
@@ -335,7 +335,7 @@ export const gameQueries = {
 
   findPublicGameByTitle: async (title: string) => {
     const result = await pool.query(
-      'SELECT ug.* FROM "userGame" ug JOIN "userGameDetails" ugd ON ug.id = ugd."gameId" WHERE ug.title = $1 AND ugd."isPublic" = true',
+      'SELECT ug.* FROM "UserGame" ug JOIN "UserGameDetails" ugd ON ug.id = ugd."gameId" WHERE ug.title = $1 AND ugd."isPublic" = true',
       [title]
     );
     return result.rows[0];
@@ -376,7 +376,7 @@ export const gameQueries = {
 
   getUserOwnGames: async (userId: string, offset: number, limit: number = 10) => {
     const result = await pool.query(
-      'SELECT * FROM "userGame" WHERE "user" = $1 ORDER BY "createdAt" ASC OFFSET $2 LIMIT $3',
+      'SELECT * FROM "UserGame" WHERE "user" = $1 ORDER BY "createdAt" ASC OFFSET $2 LIMIT $3',
       [userId, offset, limit]
     );
     return result.rows;

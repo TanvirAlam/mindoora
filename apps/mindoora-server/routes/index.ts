@@ -25,6 +25,8 @@ import followersRouter from './follow.router';
 import acceptTCRouter from './acceptTC.router';
 import gameExpRouter from './gameExperience.router';
 import deleteAccountRouter from './deleteAccount.router'
+import gameCreationRouter from './gameCreation.routes';
+import gameWinnersRouter from './game/gameWinners.router';
 
 export const router: Router = Router()
 
@@ -59,3 +61,5 @@ router.use('/api/v1/follow', followersRouter)
 router.use('/api/v1/accepttc', acceptTCRouter)
 router.use('/api/v1/gameexp', gameExpRouter)
 router.use('/api/v1/account', deleteAccountRouter)
+router.use('/api/games', gameCreationRouter)
+router.use('/api/v1/game/winners', gameWinnersRouter)
