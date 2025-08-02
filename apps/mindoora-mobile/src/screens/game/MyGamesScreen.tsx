@@ -18,6 +18,7 @@ import authService from '../../services/auth/authService';
 import { Colors } from '../../constants/colors';
 import Spinner from '../../components/ui/Spinner';
 import WinnersSection from '../../components/WinnersSection';
+import GameRoomScreen from './GameRoomScreen';
 
 interface MyGamesScreenProps {
   onBack: () => void;
@@ -60,6 +61,10 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
   const [selectedGame, setSelectedGame] = useState<GameData | null>(null);
   const [gameQuestions, setGameQuestions] = useState<Question[]>([]);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+  
+  // Game room state
+  const [isGameRoomVisible, setIsGameRoomVisible] = useState(false);
+  const [gameToPlay, setGameToPlay] = useState<GameData | null>(null);
   
   // Animation for central play button
   const scaleValue = useRef(new Animated.Value(1)).current;
@@ -129,8 +134,14 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
       return;
     }
     
-    // TODO: Navigate to game play screen
-    Alert.alert('Play Game', `Starting game: ${game.title}`);
+    // Navigate to game room
+    setGameToPlay(game);
+    setIsGameRoomVisible(true);
+  };
+
+  const handleGameRoomBack = () => {
+    setIsGameRoomVisible(false);
+    setGameToPlay(null);
   };
 
   const handleDeleteGame = (game: GameData) => {
@@ -491,6 +502,21 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
     }
   };
 
+  // Show Game Room if a game is selected to play
+  if (isGameRoomVisible && gameToPlay) {
+    return (
+      <GameRoomScreen 
+        onBack={handleGameRoomBack}
+        gameData={{
+          id: gameToPlay.id,
+          title: gameToPlay.title,
+          questionCount: gameToPlay.questionCount || gameToPlay.questionsCount || 0,
+          maxQuestions: gameToPlay.maxQuestions
+        }}
+      />
+    );
+  }
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -682,12 +708,12 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
                         <Text style={styles.radialButtonIcon}>🗑️</Text>
                       </TouchableOpacity>
                       
-                      {/* Bottom Button - EDIT */}
+                      {/* Bottom Button - ADD QUESTIONS */}
                       <TouchableOpacity 
                         style={[styles.radialButton, styles.bottomButton, styles.editButton]} 
                         onPress={() => handleEditGame(game)}
                       >
-                        <Text style={styles.radialButtonIcon}>✏️</Text>
+                        <Text style={styles.radialButtonIcon}>➕</Text>
                       </TouchableOpacity>
                       
                       {/* Left Button - VIEW */}
