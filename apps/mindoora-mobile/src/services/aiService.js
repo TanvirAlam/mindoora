@@ -68,11 +68,15 @@ class AIService {
     }
 
     try {
-      // Call backend AI service
+      // Add subtle randomization to prompt for cache busting while keeping original intact
+      const internalPrompt = `${prompt} [variation: ${Date.now().toString(36)}]`;
+      
+      // Call backend AI service with cache disabled to ensure fresh questions
       const response = await this.makeRequest('/api/questions/generate', 'POST', {
-        prompt,
+        prompt: internalPrompt,
         count,
-        difficulty
+        difficulty,
+        useCache: false, // Ensure fresh questions every time
       });
       
       if (response.success && response.data && response.data.questions) {

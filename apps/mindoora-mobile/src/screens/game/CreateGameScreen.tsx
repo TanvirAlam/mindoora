@@ -33,7 +33,7 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
   const [selectedQuestions, setSelectedQuestions] = useState<number[]>([]);
   const [gameTitle, setGameTitle] = useState('');
 
-  const handleGenerateQuestions = async () => {
+const handleGenerateQuestions = async () => {
     if (!prompt.trim()) {
       Alert.alert('Invalid Input', 'Please enter a topic or prompt to generate questions.');
       return;
