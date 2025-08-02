@@ -72,20 +72,31 @@ class AIService {
     const {
       count = 5,
       difficulty = 'medium',
-      model = 'flan-t5-small',
+      provider = 't5', // Default to T5 fine-tuned model for question generation
+      questionTypes = ['multiple-choice'],
+      useCache = true,
       focusArea = '',
     } = options;
 
+    const requestBody = {
+      prompt,
+      count,
+      difficulty,
+      provider,
+      questionTypes,
+      useCache,
+    };
+
+    // Detailed logging for debugging
+    console.log('[AIService] Preparing to generate questions with body:', JSON.stringify(requestBody, null, 2));
+    if (!prompt || prompt.length < 2) {
+      console.error('[AIService] Validation Error: Prompt is too short! Must be at least 2 characters.');
+    }
+
     try {
-      const response = await this.makeRequest('/api/local/generate', {
+      const response = await this.makeRequest('/api/questions/generate', {
         method: 'POST',
-        body: JSON.stringify({
-          prompt,
-          count,
-          difficulty,
-          model,
-          focusArea,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.success) {
@@ -106,7 +117,7 @@ class AIService {
       // If the AI service fails, provide a fallback with demo questions
       if (error.message.includes('Cannot connect to AI service') || 
           error.message.includes('Network request failed') ||
-          error.message.includes('this.hf.textToText is not a function')) {
+          error.message.includes('Failed to generate questions')) {
         console.log('[AIService] Using fallback demo questions');
         return this.generateFallbackQuestions(prompt, count, difficulty);
       }
@@ -150,17 +161,34 @@ class AIService {
   }
 
   /**
-   * Get available AI models
+   * Get available AI providers
+   */
+  async getAvailableProviders() {
+    try {
+      const response = await this.makeRequest('/api/questions/providers');
+      
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to get providers');
+      }
+
+      return response.data || {};
+    } catch (error) {
+      console.error('[AIService] Get providers failed:', error);
+      return {
+        providers: ['t5', 'huggingface'],
+        default: 't5',
+        fallback: 'huggingface'
+      };
+    }
+  }
+
+  /**
+   * Get available AI models (legacy method for backward compatibility)
    */
   async getAvailableModels() {
     try {
-      const response = await this.makeRequest('/api/local/models');
-      
-      if (!response.success) {
-        throw new Error(response.message || 'Failed to get models');
-      }
-
-      return response.data.models || {};
+      // Map old model request to provider request
+      return await this.getAvailableProviders();
     } catch (error) {
       console.error('[AIService] Get models failed:', error);
       throw error;
@@ -202,6 +230,26 @@ class AIService {
       };
     } catch (error) {
       console.error('[AIService] Health check failed:', error);
+      return {
+        healthy: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Check AI providers health
+   */
+  async checkProvidersHealth() {
+    try {
+      const response = await this.makeRequest('/api/questions/health');
+      
+      return {
+        healthy: response.success,
+        data: response.data,
+      };
+    } catch (error) {
+      console.error('[AIService] Providers health check failed:', error);
       return {
         healthy: false,
         error: error.message,

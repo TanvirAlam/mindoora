@@ -42,8 +42,8 @@ const config = {
 
   // Model Configuration
   ai: {
-    defaultProvider: process.env.DEFAULT_AI_PROVIDER || 'huggingface',
-    fallbackProvider: process.env.FALLBACK_AI_PROVIDER || 'openai',
+    defaultProvider: process.env.DEFAULT_AI_PROVIDER || 'local',
+    fallbackProvider: process.env.FALLBACK_AI_PROVIDER || 'local',
     maxQuestionsPerRequest: parseInt(process.env.MAX_QUESTIONS_PER_REQUEST) || 5,
     questionGenerationTimeout: parseInt(process.env.QUESTION_GENERATION_TIMEOUT) || 30000,
   },
@@ -75,6 +75,14 @@ const validateConfig = () => {
   }
 
   if (!config.huggingface.apiKey && config.ai.defaultProvider === 'huggingface') {
+    requiredEnvVars.push('HUGGINGFACE_API_KEY');
+  }
+
+  if (!config.googleAI.apiKey && config.ai.defaultProvider === 'googleai') {
+    requiredEnvVars.push('GOOGLE_AI_API_KEY');
+  }
+
+  if (!config.huggingface.apiKey && config.ai.defaultProvider === 't5') {
     requiredEnvVars.push('HUGGINGFACE_API_KEY');
   }
 
