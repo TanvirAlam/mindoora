@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createGameWithQuestionsController, getGameQuestionsController } from '../controllers/game/gameCreation.controller';
+import { createGameWithQuestionsController, getGameQuestionsController, getMyGamesController, deleteGameController } from '../controllers/game/gameCreation.controller';
 import { authenticateJWT } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -28,5 +28,20 @@ router.post('/', authenticateJWT, createGameWithQuestionsController);
  * @query gameId: string
  */
 router.get('/questions', authenticateJWT, getGameQuestionsController);
+
+/**
+ * @route GET /api/games/my-games
+ * @desc Get all games created by the current user
+ * @access Private (requires authentication)
+ */
+router.get('/my-games', authenticateJWT, getMyGamesController);
+
+/**
+ * @route DELETE /api/games/:gameId
+ * @desc Delete a game and all its related data
+ * @access Private (requires authentication)
+ * @param gameId: string
+ */
+router.delete('/:gameId', authenticateJWT, deleteGameController);
 
 export default router;

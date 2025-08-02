@@ -14,6 +14,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import aiService from '../../services/aiService';
 import authService from '../../services/auth/authService';
+import MyGamesScreen from './MyGamesScreen';
 import { Colors } from '../../constants/colors';
 
 interface CreateGameScreenProps {
@@ -34,6 +35,7 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
   const [selectedQuestions, setSelectedQuestions] = useState<number[]>([]);
   const [gameTitle, setGameTitle] = useState('');
   const [totalSelectedQuestions, setTotalSelectedQuestions] = useState(0);
+  const [showMyGames, setShowMyGames] = useState(false);
 
 const handleGenerateQuestions = async () => {
     if (!prompt.trim()) {
@@ -254,6 +256,15 @@ const handleGenerateQuestions = async () => {
     );
   };
 
+  // Show My Games screen if requested
+  if (showMyGames) {
+    return (
+      <MyGamesScreen 
+        onBack={() => setShowMyGames(false)} 
+      />
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
@@ -287,6 +298,15 @@ const handleGenerateQuestions = async () => {
           </Text>
           <Text style={styles.title}>Create Game</Text>
           <Text style={styles.subtitle}>Enter a topic to generate quiz questions</Text>
+          
+          {/* My Games Button */}
+          <TouchableOpacity 
+            style={styles.myGamesButton} 
+            onPress={() => setShowMyGames(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.myGamesButtonText}>📚 My Games</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Prompt Input Section */}
@@ -967,6 +987,30 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#FF9800',
+  },
+  
+  // My Games Button styles
+  myGamesButton: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 15,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  
+  myGamesButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 

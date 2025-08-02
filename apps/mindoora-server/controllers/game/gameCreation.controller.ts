@@ -268,3 +268,177 @@ export const getGameQuestionsController = async (req: Request, res: Response) =>
     });
   }
 };
+
+export const getMyGamesController = async (req: Request, res: Response) => {
+  try {
+    const userId = res.locals.user.id;
+
+    // Get all games created by the user with question counts
+    const gamesResult = await pool.query(`
+      SELECT 
+        ug.id,
+        ug.title,
+        ug.language,
+        ug."nPlayer",
+        ug."createdAt",
+        COUNT(q.id) as "questionCount",
+        ugd.description,
+        ugd.category,
+        ugd."isPublic"
+      FROM "UserGame" ug
+      LEFT JOIN "Questions" q ON ug.id = q."gameId"
+      LEFT JOIN "UserGameDetails" ugd ON ug.id = ugd."gameId"
+      WHERE ug."user" = $1
+      GROUP BY ug.id, ug.title, ug.language, ug."nPlayer", ug."createdAt", ugd.description, ugd.category, ugd."isPublic"
+      ORDER BY ug."createdAt" DESC
+    `, [userId]);
+
+    const games = gamesResult.rows.map(game => ({
+      id: game.id,
+      title: game.title,
+      language: game.language,
+      nPlayer: game.nPlayer,
+      createdAt: game.createdAt,
+      questionCount: parseInt(game.questionCount) || 0,
+      isReady: parseInt(game.questionCount) >= 20,
+      maxQuestions: 20,
+      remainingQuestions: Math.max(0, 20 - (parseInt(game.questionCount) || 0)),
+      description: game.description,
+      category: game.category,
+      isPublic: game.isPublic
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        games,
+        totalGames: games.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching user games:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch your games',
+      message: error.message
+    });
+  }
+};
+
+export const deleteGameController = async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  
+  try {
+    const { gameId } = req.params;
+    const userId = res.locals.user.id;
+
+    if (!gameId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Game ID is required'
+      });
+    }
+
+    // Start transaction
+    await client.query('BEGIN');
+
+    // Verify the game exists and belongs to the user
+    const gameResult = await client.query(
+      'SELECT id, title FROM "UserGame" WHERE id = $1 AND "user" = $2',
+      [gameId, userId]
+    );
+
+    if (gameResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        error: 'Game not found or you do not have permission to delete it'
+      });
+    }
+
+    const game = gameResult.rows[0];
+
+    // Delete in correct order to handle foreign key constraints
+    
+    // 1. Delete from GameRoomMessages table (depends on GamePlayers and GameRooms)
+    await client.query(`
+      DELETE FROM "GameRoomMessages" 
+      WHERE "roomId" IN (
+        SELECT id FROM "GameRooms" WHERE "gameId" = $1
+      )
+    `, [gameId]);
+    
+    // 2. Delete from QuestionsSolved table (depends on GamePlayers and Questions)
+    await client.query(`
+      DELETE FROM "QuestionsSolved" 
+      WHERE "playerId" IN (
+        SELECT gp.id FROM "GamePlayers" gp 
+        JOIN "GameRooms" gr ON gp."roomId" = gr.id 
+        WHERE gr."gameId" = $1
+      )
+    `, [gameId]);
+    
+    // 3. Delete from userGameScore table
+    await client.query('DELETE FROM "userGameScore" WHERE "gameId" = $1', [gameId]);
+    
+    // 4. Delete from FeedbackGame table
+    await client.query('DELETE FROM "FeedbackGame" WHERE "gameId" = $1', [gameId]);
+    
+    // 5. Delete from GamePlayers table (depends on GameRooms)
+    await client.query(`
+      DELETE FROM "GamePlayers" 
+      WHERE "roomId" IN (
+        SELECT id FROM "GameRooms" WHERE "gameId" = $1
+      )
+    `, [gameId]);
+    
+    // 6. Delete from GameRooms table
+    await client.query('DELETE FROM "GameRooms" WHERE "gameId" = $1', [gameId]);
+    
+    // 7. Delete from Questions table
+    await client.query('DELETE FROM "Questions" WHERE "gameId" = $1', [gameId]);
+    
+    // 8. Delete from UserGameDetails table
+    await client.query('DELETE FROM "UserGameDetails" WHERE "gameId" = $1', [gameId]);
+    
+    // 9. Finally, delete from UserGame table
+    await client.query('DELETE FROM "UserGame" WHERE id = $1', [gameId]);
+
+    // Commit transaction
+    await client.query('COMMIT');
+
+    console.log(`✅ Game "${game.title}" (ID: ${gameId}) deleted successfully by user ${userId}`);
+
+    return res.status(200).json({
+      success: true,
+      message: `Game "${game.title}" has been deleted successfully`,
+      data: {
+        deletedGameId: gameId,
+        deletedGameTitle: game.title
+      }
+    });
+
+  } catch (error) {
+    // Rollback transaction on error
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Error during rollback:', rollbackError);
+    }
+    
+    console.error('❌ Error deleting game:');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Game ID:', req.params.gameId);
+    console.error('User ID:', res.locals.user?.id);
+    
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to delete game',
+      message: error.message
+    });
+  } finally {
+    client.release();
+  }
+};
