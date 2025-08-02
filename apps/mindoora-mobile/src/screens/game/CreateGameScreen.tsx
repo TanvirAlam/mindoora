@@ -16,6 +16,7 @@ import aiService from '../../services/aiService';
 import authService from '../../services/auth/authService';
 import MyGamesScreen from './MyGamesScreen';
 import { Colors } from '../../constants/colors';
+import Spinner from '../../components/ui/Spinner';
 
 interface CreateGameScreenProps {
   onBack: () => void;
@@ -36,6 +37,7 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
   const [gameTitle, setGameTitle] = useState('');
   const [totalSelectedQuestions, setTotalSelectedQuestions] = useState(0);
   const [showMyGames, setShowMyGames] = useState(false);
+  const [isCreatingGame, setIsCreatingGame] = useState(false);
 
 const handleGenerateQuestions = async () => {
     if (!prompt.trim()) {
@@ -150,6 +152,7 @@ const handleGenerateQuestions = async () => {
       return;
     }
 
+    setIsCreatingGame(true);
     try {
       const selectedQuestionsList = selectedQuestions.map(index => generatedQuestions[index]);
       
@@ -197,6 +200,8 @@ const handleGenerateQuestions = async () => {
           }
         }
       ]);
+    } finally {
+      setIsCreatingGame(false);
     }
   };
 
@@ -357,6 +362,7 @@ const handleGenerateQuestions = async () => {
           </TouchableOpacity>
         </View>
 
+<Spinner visible={isCreatingGame} />
         {/* Generated Questions Section */}
         {generatedQuestions.length > 0 && (
           <View style={styles.questionsSection}>

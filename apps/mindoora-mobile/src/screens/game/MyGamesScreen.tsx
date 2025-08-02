@@ -13,6 +13,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import authService from '../../services/auth/authService';
 import { Colors } from '../../constants/colors';
+import Spinner from '../../components/ui/Spinner';
 
 interface MyGamesScreenProps {
   onBack: () => void;
@@ -34,6 +35,8 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
   const [games, setGames] = useState<GameData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deletingGameTitle, setDeletingGameTitle] = useState('');
 
   const fetchMyGames = async () => {
     try {
@@ -67,6 +70,16 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
       }
       
       const result = await response.json();
+      console.log('API Response:', JSON.stringify(result, null, 2));
+      console.log('Games data:', result.data?.games);
+      
+      // Log each game's data structure
+      if (result.data?.games) {
+        result.data.games.forEach((game, index) => {
+          console.log(`Game ${index}:`, JSON.stringify(game, null, 2));
+        });
+      }
+      
       setGames(result.data?.games || []);
     } catch (error) {
       console.error('Error fetching games:', error);
@@ -97,19 +110,45 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
   const handleDeleteGame = (game: GameData) => {
     Alert.alert(
       'Delete Game',
-      `Are you sure you want to delete "${game.title}"? This action cannot be undone.`,
+      `Are you sure you want to delete "${game.title}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => confirmDeleteGame(game) }
+      ]
+    );
+  };
+
+  const handleEditGame = (game: GameData) => {
+    Alert.alert(
+      'Edit Game',
+      `Edit "${game.title}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: () => confirmDeleteGame(game)
+          text: 'Edit', 
+          onPress: () => {
+            // TODO: Navigate to edit screen or implement edit functionality
+            Alert.alert('Coming Soon', 'Edit functionality will be available in a future update.');
+          }
         }
       ]
     );
   };
 
+  const handleViewGame = (game: GameData) => {
+    Alert.alert(
+      'View Game Details',
+      `Game: ${game.title}\nQuestions: ${game.questionsCount}/${game.maxQuestions}\nStatus: ${game.isReady ? 'Ready to Play' : 'In Progress'}\nCreated: ${formatDate(game.createdAt)}`,
+      [
+        { text: 'OK' }
+      ]
+    );
+  };
+
   const confirmDeleteGame = async (game: GameData) => {
+    setIsDeleting(true);
+    setDeletingGameTitle(game.title);
+    
     try {
       const currentUser = authService.getCurrentUser();
       
@@ -147,6 +186,9 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
     } catch (error) {
       console.error('Error deleting game:', error);
       Alert.alert('Error', error.message || 'Failed to delete game. Please try again.');
+    } finally {
+      setIsDeleting(false);
+      setDeletingGameTitle('');
     }
   };
 
@@ -246,7 +288,21 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
           </View>
           <View style={styles.statsCard}>
             <Text style={styles.statsNumber}>
-              {games.reduce((total, game) => total + game.questionsCount, 0)}
+              {games.reduce((total, game) => {
+                // Try different possible field names
+                const questionCount = Number(game.questionsCount) || 
+                                    Number(game.questionCount) || 
+                                    Number(game.questions_count) || 
+                                    Number(game.questions?.length) || 
+                                    0;
+                console.log(`Game ${game.id} question count:`, questionCount, 'Raw data:', {
+                  questionsCount: game.questionsCount,
+                  questionCount: game.questionCount,
+                  questions_count: game.questions_count,
+                  questionsLength: game.questions?.length
+                });
+                return total + questionCount;
+              }, 0)}
             </Text>
             <Text style={styles.statsLabel}>Total Questions</Text>
           </View>
@@ -296,17 +352,22 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
                   
                   <View style={styles.gameCardStats}>
                     <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>{game.questionsCount}</Text>
+                      <Text style={styles.statNumber}>
+                        {Number(game.questionsCount) || 
+                         Number(game.questionCount) || 
+                         Number(game.questions_count) || 
+                         Number(game.questions?.length) || 0}
+                      </Text>
                       <Text style={styles.statLabel}>Questions</Text>
                     </View>
                     <View style={styles.statDivider} />
                     <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>{game.maxQuestions}</Text>
+                      <Text style={styles.statNumber}>{Number(game.maxQuestions) || 20}</Text>
                       <Text style={styles.statLabel}>Max Questions</Text>
                     </View>
                     <View style={styles.statDivider} />
                     <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>{game.nPlayer || 1}</Text>
+                      <Text style={styles.statNumber}>{Number(game.nPlayer) || 1}</Text>
                       <Text style={styles.statLabel}>Players</Text>
                     </View>
                   </View>
@@ -318,14 +379,14 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
                         style={[
                           styles.progressFill, 
                           { 
-                            width: `${Math.min((game.questionsCount / game.maxQuestions) * 100, 100)}%`,
+                            width: `${Math.min(((Number(game.questionsCount) || 0) / (Number(game.maxQuestions) || 20)) * 100, 100)}%`,
                             backgroundColor: game.isReady ? '#4CAF50' : '#FF9800'
                           }
                         ]} 
                       />
                     </View>
                     <Text style={styles.progressText}>
-                      {game.questionsCount}/{game.maxQuestions} questions
+                      {Number(game.questionsCount) || 0}/{Number(game.maxQuestions) || 20} questions
                     </Text>
                   </View>
                   
@@ -350,12 +411,36 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
                       <Text style={[styles.actionButtonText, styles.deleteButtonText]}>🗑️ DELETE</Text>
                     </TouchableOpacity>
                   </View>
+                  
+                  {/* Additional Action Buttons */}
+                  <View style={styles.gameCardSecondaryActions}>
+                    <TouchableOpacity 
+                      style={[styles.actionButton, styles.editButton]} 
+                      onPress={() => handleEditGame(game)}
+                    >
+                      <Text style={[styles.actionButtonText, styles.editButtonText]}>✏️ EDIT</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity 
+                      style={[styles.actionButton, styles.viewButton]} 
+                      onPress={() => handleViewGame(game)}
+                    >
+                      <Text style={[styles.actionButtonText, styles.viewButtonText]}>👁️ VIEW</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               );
             })}
           </View>
         )}
       </ScrollView>
+      
+      {/* Delete Spinner */}
+      <Spinner 
+        visible={isDeleting}
+        message={`Deleting "${deletingGameTitle}"...`}
+        color="#f44336"
+      />
     </SafeAreaView>
   );
 };
@@ -600,6 +685,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 10,
+    marginBottom: 10,
+  },
+  gameCardSecondaryActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
   },
   actionButton: {
     flex: 1,
@@ -618,6 +710,12 @@ const styles = StyleSheet.create({
   deleteButton: {
     backgroundColor: '#f44336',
   },
+  editButton: {
+    backgroundColor: '#2196F3', // Blue
+  },
+  viewButton: {
+    backgroundColor: '#FF9800', // Orange
+  },
   disabledButton: {
     opacity: 0.6,
   },
@@ -629,6 +727,12 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   deleteButtonText: {
+    color: '#fff',
+  },
+  editButtonText: {
+    color: '#fff',
+  },
+  viewButtonText: {
     color: '#fff',
   },
 });
