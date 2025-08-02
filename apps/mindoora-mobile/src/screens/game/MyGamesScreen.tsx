@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   RefreshControl,
   Modal,
   FlatList,
+  Animated,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import authService from '../../services/auth/authService';
@@ -57,6 +58,9 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
   const [selectedGame, setSelectedGame] = useState<GameData | null>(null);
   const [gameQuestions, setGameQuestions] = useState<Question[]>([]);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+  
+  // Animation for central play button
+  const scaleValue = useRef(new Animated.Value(1)).current;
 
   const fetchMyGames = async () => {
     try {
@@ -149,6 +153,23 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
           onPress: () => {
             // TODO: Navigate to edit screen or implement edit functionality
             Alert.alert('Coming Soon', 'Edit functionality will be available in a future update.');
+          }
+        }
+      ]
+    );
+  };
+
+  const handleInviteGame = (game: GameData) => {
+    Alert.alert(
+      'Invite Players',
+      `Invite friends to join "${game.title}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Send Invite', 
+          onPress: () => {
+            // TODO: Implement invite functionality
+            Alert.alert('Coming Soon', 'Invite functionality will be available in a future update.');
           }
         }
       ]
@@ -408,6 +429,28 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
     loadGames();
   }, []);
 
+  useEffect(() => {
+    // Start the pulsing animation
+    const startPulseAnimation = () => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(scaleValue, {
+            toValue: 1.1,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scaleValue, {
+            toValue: 1,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    };
+
+    startPulseAnimation();
+  }, [scaleValue]);
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Unknown';
     const date = new Date(dateString);
@@ -598,54 +641,77 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack }) => {
                         style={[
                           styles.progressFill, 
                           { 
-                            width: `${Math.min(((Number(game.questionsCount) || 0) / (Number(game.maxQuestions) || 20)) * 100, 100)}%`,
+                            width: `${Math.min(((Number(game.questionsCount) || Number(game.questionCount) || 0) / (Number(game.maxQuestions) || 20)) * 100, 100)}%`,
                             backgroundColor: game.isReady ? '#4CAF50' : '#FF9800'
                           }
                         ]} 
                       />
                     </View>
                     <Text style={styles.progressText}>
-                      {Number(game.questionsCount) || 0}/{Number(game.maxQuestions) || 20} questions
+                      {Number(game.questionsCount) || Number(game.questionCount) || 0}/{Number(game.maxQuestions) || 20} questions
                     </Text>
                   </View>
                   
-                  {/* Action Buttons */}
-                  <View style={styles.gameCardActions}>
-                    <TouchableOpacity 
-                      style={[
-                        styles.actionButton, 
-                        styles.playButton, 
-                        game.isReady && styles.readyToPlayButton,
-                        !game.isReady && styles.disabledButton
-                      ]} 
-                      onPress={() => handlePlayGame(game)}
-                    >
-                      <Text style={[styles.actionButtonText, styles.playButtonText]}>🎮 PLAY</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[styles.actionButton, styles.deleteButton]} 
-                      onPress={() => handleDeleteGame(game)}
-                    >
-                      <Text style={[styles.actionButtonText, styles.deleteButtonText]}>🗑️ DELETE</Text>
-                    </TouchableOpacity>
-                  </View>
-                  
-                  {/* Additional Action Buttons */}
-                  <View style={styles.gameCardSecondaryActions}>
-                    <TouchableOpacity 
-                      style={[styles.actionButton, styles.editButton]} 
-                      onPress={() => handleEditGame(game)}
-                    >
-                      <Text style={[styles.actionButtonText, styles.editButtonText]}>✏️ EDIT</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[styles.actionButton, styles.viewButton]} 
-                      onPress={() => handleViewGame(game)}
-                    >
-                      <Text style={[styles.actionButtonText, styles.viewButtonText]}>👁️ VIEW</Text>
-                    </TouchableOpacity>
+                  {/* Circular Radial Button Layout */}
+                  <View style={styles.radialButtonsContainer}>
+                    {/* Background Circle */}
+                    <View style={styles.radialBackground}>
+                      
+                      {/* Top Button - INVITE */}
+                      <TouchableOpacity 
+                        style={[styles.radialButton, styles.topButton, styles.inviteButton]} 
+                        onPress={() => handleInviteGame(game)}
+                      >
+                        <Text style={styles.radialButtonIcon}>👥</Text>
+                      </TouchableOpacity>
+                      
+                      {/* Right Button - DELETE */}
+                      <TouchableOpacity 
+                        style={[styles.radialButton, styles.rightButton, styles.deleteButton]} 
+                        onPress={() => handleDeleteGame(game)}
+                      >
+                        <Text style={styles.radialButtonIcon}>🗑️</Text>
+                      </TouchableOpacity>
+                      
+                      {/* Bottom Button - EDIT */}
+                      <TouchableOpacity 
+                        style={[styles.radialButton, styles.bottomButton, styles.editButton]} 
+                        onPress={() => handleEditGame(game)}
+                      >
+                        <Text style={styles.radialButtonIcon}>✏️</Text>
+                      </TouchableOpacity>
+                      
+                      {/* Left Button - VIEW */}
+                      <TouchableOpacity 
+                        style={[styles.radialButton, styles.leftButton, styles.viewButton]} 
+                        onPress={() => handleViewGame(game)}
+                      >
+                        <Text style={styles.radialButtonIcon}>👁️</Text>
+                      </TouchableOpacity>
+                      
+                      {/* Central PLAY Button */}
+                      <View style={styles.centralPlayContainer}>
+                        <Animated.View 
+                          style={[
+                            {
+                              transform: [{ scale: scaleValue }],
+                            }
+                          ]}
+                        >
+                          <TouchableOpacity 
+                            style={[
+                              styles.centralPlayButton, 
+                              game.isReady && styles.readyCentralPlayButton,
+                              !game.isReady && styles.disabledCentralPlayButton
+                            ]} 
+                            onPress={() => handlePlayGame(game)}
+                          >
+                            <Text style={styles.centralPlayIcon}>🎮</Text>
+                          </TouchableOpacity>
+                        </Animated.View>
+                      </View>
+                      
+                    </View>
                   </View>
                 </View>
               );
@@ -1118,10 +1184,19 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 16,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 50,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
   },
   playButton: {
     backgroundColor: '#388E3C', // Dark green
@@ -1350,6 +1425,180 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  
+  // Circular Play Button styles
+  circularPlayContainer: {
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  circularPlayButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#388E3C', // Dark green
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  readyCircularPlayButton: {
+    backgroundColor: '#4CAF50', // Bright green for ready games
+  },
+  disabledCircularPlayButton: {
+    backgroundColor: '#BDBDBD', // Grey for disabled
+    opacity: 0.6,
+  },
+  circularPlayIcon: {
+    fontSize: 32,
+    color: '#fff',
+  },
+  
+  // Invite Button styles
+  inviteButton: {
+    backgroundColor: '#9C27B0', // Purple
+  },
+  inviteButtonText: {
+    color: '#fff',
+  },
+  
+  // New Buttons Container Layout
+  buttonsContainer: {
+    position: 'relative',
+    paddingVertical: 10,
+  },
+  topButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  bottomButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 20,
+  },
+  circularPlayContainer: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -40 }, { translateY: -40 }],
+    zIndex: 10,
+  },
+  
+  // Radial Button Layout Styles
+  radialButtonsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    height: 260,
+  },
+  radialBackground: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: '#f8f9fa',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  radialButton: {
+    position: 'absolute',
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  radialButtonIcon: {
+    fontSize: 22,
+    color: 'white',
+  },
+  
+  // Radial button positions (4 buttons around the circle)
+  topButton: {
+    top: -10,
+    left: '50%',
+    transform: [{ translateX: -29 }],
+  },
+  rightButton: {
+    right: -10,
+    top: '50%',
+    transform: [{ translateY: -29 }],
+  },
+  bottomButton: {
+    bottom: -10,
+    left: '50%',
+    transform: [{ translateX: -29 }],
+  },
+  leftButton: {
+    left: -10,
+    top: '50%',
+    transform: [{ translateY: -29 }],
+  },
+  
+  // Central play button in radial layout
+  centralPlayContainer: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -35 }, { translateY: -35 }],
+  },
+  centralPlayButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  readyCentralPlayButton: {
+    backgroundColor: '#4CAF50',
+  },
+  disabledCentralPlayButton: {
+    backgroundColor: '#BDBDBD',
+    opacity: 0.6,
+  },
+  centralPlayIcon: {
+    fontSize: 48,
+    color: '#fff',
+  },
+  
+  // Additional button styles for radial layout
+  settingsButton: {
+    backgroundColor: '#607D8B', // Blue grey
+  },
+  shareButton: {
+    backgroundColor: '#4CAF50', // Green
+  },
+  infoButton: {
+    backgroundColor: '#2196F3', // Blue
+  },
+  favoriteButton: {
+    backgroundColor: '#FFC107', // Amber
   },
   
 });
