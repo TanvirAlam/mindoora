@@ -8,6 +8,8 @@ import {
   Alert,
   ActivityIndicator,
   SafeAreaView,
+  ImageBackground,
+  Dimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import authService from '../../services/auth/authService';
@@ -68,66 +70,95 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       
-      {/* Header Section */}
-      <View style={styles.header}>
-        <Image 
-          source={require('../../../assets/mindoora.png')} 
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.tagline}>Helping Children Learn and Grow</Text>
-        <Text style={styles.subtitle}>
-          Join the fun! Play quiz games with friends and family
-        </Text>
-      </View>
-
-      {/* Login Section */}
-      <View style={styles.loginSection}>
-        <Text style={styles.loginTitle}>Get Started</Text>
+      <ImageBackground
+        source={require('../../../assets/mindoora-bg-1.png')}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      >
+        {/* Dark overlay for better text readability */}
+        <View style={styles.overlay} />
         
-        {/* Login Buttons Row */}
-        <View style={styles.buttonRow}>
-          {/* Google Login Button */}
-          <TouchableOpacity
-            style={[styles.iconButton, styles.googleButton]}
-            onPress={handleGoogleLogin}
-            disabled={isLoading}
-          >
-            {loadingProvider === 'google' ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <GoogleIcon size={24} />
-            )}
-          </TouchableOpacity>
+        {/* Content Container */}
+        <View style={styles.contentContainer}>
+          {/* Header Section */}
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              <Image 
+                source={require('../../../assets/mindoora.png')} 
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
+            <Text style={styles.tagline}>Helping Children Learn and Grow</Text>
+            <Text style={styles.subtitle}>
+              Join the fun! Play quiz games with friends and family
+            </Text>
+          </View>
 
-          {/* Facebook Login Button */}
-          <TouchableOpacity
-            style={[styles.iconButton, styles.facebookButton]}
-            onPress={handleFacebookLogin}
-            disabled={isLoading}
-          >
-            {loadingProvider === 'facebook' ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <FacebookIcon size={24} />
-            )}
-          </TouchableOpacity>
+          {/* Login Section */}
+          <View style={styles.loginSection}>
+            {/* Login Buttons Row */}
+            <View style={styles.buttonRow}>
+              {/* Google Login Button */}
+              <TouchableOpacity
+                style={[styles.iconButton, styles.googleButton]}
+                onPress={handleGoogleLogin}
+                disabled={isLoading}
+              >
+                {loadingProvider === 'google' ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <GoogleIcon size={24} />
+                )}
+              </TouchableOpacity>
+
+              {/* Facebook Login Button */}
+              <TouchableOpacity
+                style={[styles.iconButton, styles.facebookButton]}
+                onPress={handleFacebookLogin}
+                disabled={isLoading}
+              >
+                {loadingProvider === 'facebook' ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <FacebookIcon size={24} />
+                )}
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.termsText}>
+              By continuing, you agree to our Terms of Service and Privacy Policy
+            </Text>
+            <Text style={styles.copyrightText}>
+              © 2025 Mindoora. All rights reserved.
+            </Text>
+          </View>
         </View>
-
-        <Text style={styles.termsText}>
-          By continuing, you agree to our Terms of Service and Privacy Policy
-        </Text>
-      </View>
+      </ImageBackground>
     </SafeAreaView>
   );
 };
 
+const { width, height } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background.primary,
+  },
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)', // Light dark overlay for readability
+  },
+  contentContainer: {
+    flex: 1,
+    justifyContent: 'space-between',
   },
   header: {
     flex: 1,
@@ -136,33 +167,62 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     paddingTop: 60,
   },
+  logoContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)', // White transparent background
+    borderRadius: 25,
+    paddingHorizontal: 8,
+    paddingVertical: 0,
+    marginBottom: 30,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    // Glossy effect
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    // Glass morphism effect
+    backdropFilter: 'blur(10px)',
+  },
   logo: {
     width: 280,
     height: 120,
-    marginBottom: 20,
+    marginBottom: 0, // Remove bottom margin since container handles spacing
+    tintColor: undefined, // Keep original colors
   },
   tagline: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: Colors.text.primary,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   subtitle: {
     fontSize: 16,
-    color: Colors.text.secondary,
+    color: '#F0F0F0',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   loginSection: {
+    marginHorizontal: 20,
     paddingHorizontal: 30,
     paddingTop: 40,
     paddingBottom: 50,
+    marginBottom: 40,
   },
   loginTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
-    color: Colors.text.primary,
+    color: '#333333',
     textAlign: 'center',
     marginBottom: 30,
   },
@@ -171,22 +231,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 30,
-    gap: 20,
+    gap: 25,
   },
   iconButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 3,
+      height: 4,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 8,
   },
   googleButton: {
     backgroundColor: Colors.primary,
@@ -196,10 +256,18 @@ const styles = StyleSheet.create({
   },
   termsText: {
     fontSize: 12,
-    color: Colors.text.light,
+    color: '#666666',
     textAlign: 'center',
     marginTop: 20,
-    lineHeight: 16,
+    lineHeight: 18,
+    paddingHorizontal: 10,
+  },
+  copyrightText: {
+    fontSize: 11,
+    color: '#888888',
+    textAlign: 'center',
+    marginTop: 15,
+    fontWeight: '500',
   },
 });
 

@@ -34,8 +34,8 @@ const LOCAL_MODELS = {
   }
 };
 
-// Fallback order for models when one fails (most reliable first)
-const MODEL_FALLBACK_ORDER = ['gpt2', 'distilgpt2', 'flan-t5-small'];
+// Fallback order for models when one fails (best for Q&A first)
+const MODEL_FALLBACK_ORDER = ['flan-t5-small', 'gpt2', 'distilgpt2'];
 
 class LocalModelService {
   constructor() {
@@ -141,14 +141,96 @@ class LocalModelService {
   }
 
   /**
-   * Generate questions with intelligent model-aware approach
+   * Generate questions using the actual AI model
+   */
+  async generateWithRealModel(modelName, prompt, count, difficulty, focusArea) {
+    logger.info(`Attempting to use real AI model: ${modelName}`);
+    
+    try {
+      // Import transformers.js dynamically
+      const { pipeline } = await import('@xenova/transformers');
+      
+      // Use the T5 model for text generation (best for Q&A tasks)
+      const modelPath = modelName === 'flan-t5-small' ? 'Xenova/flan-t5-small' : `Xenova/${modelName}`;
+      
+      // Create or get cached pipeline
+      if (!this.pipelines.has(modelName)) {
+        logger.info(`Loading AI model pipeline: ${modelPath}`);
+        const generator = await pipeline('text2text-generation', modelPath, {
+          local_files_only: false,
+          cache_dir: this.modelPath
+        });
+        this.pipelines.set(modelName, generator);
+      }
+      
+      const generator = this.pipelines.get(modelName);
+      
+      // Build a proper instruction prompt for the T5 model
+      const instructionPrompt = this.buildInstructionPrompt(prompt, count, difficulty, focusArea);
+      
+      logger.info('Generating questions with real AI model...');
+      const result = await generator(instructionPrompt, {
+        max_length: 1024,
+        temperature: 0.7,
+        do_sample: true,
+        num_return_sequences: 1
+      });
+      
+      const generatedText = result[0].generated_text || result.generated_text || '';
+      logger.info('AI model generated text length:', generatedText.length);
+      
+      // Parse the generated questions
+      const questions = this.parseQuestions(generatedText, prompt);
+      
+      // If parsing fails or no questions found, return null to trigger fallback
+      if (!questions || questions.length === 0) {
+        logger.warn('AI model generated text but no valid questions could be parsed');
+        return null;
+      }
+      
+      logger.info(`Successfully parsed ${questions.length} questions from AI model`);
+      return questions;
+      
+    } catch (error) {
+      logger.error('Real AI model failed:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate questions with real AI model
    */
   async generateWithLocalModel(modelName, prompt, count, difficulty, focusArea) {
-    logger.info(`Using intelligent question generation for model: ${modelName}`);
+    logger.info(`Using real AI model for question generation: ${modelName}`);
     
     const startTime = Date.now();
     
-    // Generate intelligent questions based on the topic and model capabilities
+    try {
+      // Try to use the actual AI model first
+      const questions = await this.generateWithRealModel(modelName, prompt, count, difficulty, focusArea);
+      
+      if (questions && questions.length > 0) {
+        const duration = Date.now() - startTime;
+        const result = {
+          questions,
+          metadata: {
+            generated_at: new Date().toISOString(),
+            count: questions.length,
+            provider: 'local-ai',
+            model: modelName,
+            duration: `${duration}ms`,
+            note: `Generated using real ${modelName} AI model`,
+          },
+        };
+        
+        logger.info(`Successfully generated ${questions.length} questions with real AI model: ${modelName}`);
+        return result;
+      }
+    } catch (error) {
+      logger.warn(`Real AI model ${modelName} failed, falling back to intelligent questions:`, error.message);
+    }
+    
+    // Fallback to intelligent questions if real model fails
     const questions = await this.generateIntelligentQuestions(prompt, count, difficulty, focusArea, modelName);
     
     const duration = Date.now() - startTime;
@@ -398,14 +480,14 @@ Now generate ${count} questions about "${topic}":
         },
         {
           question: "When did World War II end?",
-          options: { A: "1944", B: "1945", C: "1946", D: "1947" },
-          correctAnswer: "B",
+          options: { A: "1945", B: "1946", C: "1947", D: "1944" },
+          correctAnswer: "A",
           explanation: "World War II ended in 1945 with Japan's surrender in September."
         },
         {
           question: "Which empire was ruled by Julius Caesar?",
-          options: { A: "Greek Empire", B: "Roman Empire", C: "Persian Empire", D: "Ottoman Empire" },
-          correctAnswer: "B",
+          options: { A: "Greek Empire", B: "Persian Empire", C: "Ottoman Empire", D: "Roman Empire" },
+          correctAnswer: "D",
           explanation: "Julius Caesar was a Roman general and statesman who played a critical role in the Roman Empire."
         }
       ],
@@ -501,23 +583,219 @@ Now generate ${count} questions about "${topic}":
   }
 
   /**
+   * Get the mock question bank for reuse in intelligent generation
+   */
+  getMockQuestionBank() {
+    return {
+      javascript: [
+        {
+          question: "What is the correct way to declare a variable in JavaScript?",
+          options: { A: "var myVar;", B: "let myVar;", C: "const myVar;", D: "All of the above" },
+          correctAnswer: "D",
+          explanation: "`var`, `let`, and `const` are all valid ways to declare variables in JavaScript, each with different scoping rules."
+        },
+        {
+          question: "Which of these is NOT a primitive data type in JavaScript?",
+          options: { A: "String", B: "Number", C: "Object", D: "Boolean" },
+          correctAnswer: "C",
+          explanation: "Object is a composite data type, not a primitive type."
+        },
+        {
+          question: "What does the '===' operator do in JavaScript?",
+          options: { A: "Checks for equality only", B: "Checks for strict equality (value and type)", C: "Assigns a value", D: "Compares references" },
+          correctAnswer: "B",
+          explanation: "The '===' operator checks for strict equality, comparing both value and type without type coercion."
+        }
+      ],
+      python: [
+        {
+          question: "Which of these is the correct way to create a list in Python?",
+          options: { A: "list = {1, 2, 3}", B: "list = [1, 2, 3]", C: "list = (1, 2, 3)", D: "list = <1, 2, 3>" },
+          correctAnswer: "B",
+          explanation: "Square brackets [] are used to create lists in Python."
+        },
+        {
+          question: "What does the 'len()' function do in Python?",
+          options: { A: "Returns the length of an object", B: "Creates a new list", C: "Sorts a list", D: "Removes an element" },
+          correctAnswer: "A",
+          explanation: "The len() function returns the number of items in an object (list, string, tuple, etc.)."
+        }
+      ],
+      react: [
+        {
+          question: "What is JSX in React?",
+          options: { A: "A JavaScript library", B: "A syntax extension for JavaScript", C: "A CSS framework", D: "A database" },
+          correctAnswer: "B",
+          explanation: "JSX is a syntax extension for JavaScript that allows you to write HTML-like code in your JavaScript files."
+        },
+        {
+          question: "Which hook is used to manage state in functional components?",
+          options: { A: "useEffect", B: "useContext", C: "useState", D: "useReducer" },
+          correctAnswer: "C",
+          explanation: "The useState hook is the primary way to add state to functional components in React."
+        }
+      ],
+      history: [
+        {
+          question: "Who was the first President of the United States?",
+          options: { A: "Thomas Jefferson", B: "Abraham Lincoln", C: "George Washington", D: "John Adams" },
+          correctAnswer: "C",
+          explanation: "George Washington was the first President, serving from 1789 to 1797."
+        },
+        {
+          question: "When did World War II end?",
+          options: { A: "1944", B: "1945", C: "1946", D: "1947" },
+          correctAnswer: "B",
+          explanation: "World War II ended in 1945 with Japan's surrender in September."
+        },
+        {
+          question: "Which empire was ruled by Julius Caesar?",
+          options: { A: "Greek Empire", B: "Roman Empire", C: "Persian Empire", D: "Ottoman Empire" },
+          correctAnswer: "B",
+          explanation: "Julius Caesar was a Roman general and statesman who played a critical role in the Roman Empire."
+        },
+        {
+          question: "Which ancient civilization built the pyramids of Giza?",
+          options: { A: "Romans", B: "Greeks", C: "Egyptians", D: "Babylonians" },
+          correctAnswer: "C",
+          explanation: "The pyramids of Giza were built by the ancient Egyptians as tombs for their pharaohs around 2580-2510 BCE."
+        },
+        {
+          question: "What was the main cause of World War I?",
+          options: { A: "Economic depression", B: "Assassination of Archduke Franz Ferdinand", C: "Religious conflicts", D: "Colonial disputes only" },
+          correctAnswer: "B",
+          explanation: "The assassination of Archduke Franz Ferdinand of Austria-Hungary in 1914 triggered the complex web of alliances that led to World War I."
+        },
+        {
+          question: "Which revolution began in 1789?",
+          options: { A: "American Revolution", B: "Russian Revolution", C: "French Revolution", D: "Industrial Revolution" },
+          correctAnswer: "C",
+          explanation: "The French Revolution began in 1789 and fundamentally changed French society and had lasting impacts on world history."
+        },
+        {
+          question: "Who was known as the 'Iron Lady'?",
+          options: { A: "Queen Elizabeth I", B: "Margaret Thatcher", C: "Catherine the Great", D: "Golda Meir" },
+          correctAnswer: "B",
+          explanation: "Margaret Thatcher, the UK Prime Minister from 1979-1990, was nicknamed the 'Iron Lady' for her uncompromising political style."
+        },
+        {
+          question: "Which war was fought between 1861-1865 in the United States?",
+          options: { A: "Revolutionary War", B: "War of 1812", C: "Civil War", D: "Spanish-American War" },
+          correctAnswer: "C",
+          explanation: "The American Civil War (1861-1865) was fought between the Union and Confederate states over slavery and states' rights."
+        }
+      ],
+      science: [
+        {
+          question: "What is the chemical symbol for water?",
+          options: { A: "H2O", B: "CO2", C: "O2", D: "NaCl" },
+          correctAnswer: "A",
+          explanation: "Water is composed of two hydrogen atoms and one oxygen atom, hence H2O."
+        },
+        {
+          question: "What is the speed of light in vacuum?",
+          options: { A: "300,000 km/s", B: "299,792,458 m/s", C: "186,000 miles/s", D: "Both A and B" },
+          correctAnswer: "D",
+          explanation: "The speed of light is approximately 300,000 km/s or exactly 299,792,458 m/s."
+        },
+        {
+          question: "Which planet is closest to the Sun?",
+          options: { A: "Venus", B: "Earth", C: "Mercury", D: "Mars" },
+          correctAnswer: "C",
+          explanation: "Mercury is the innermost planet in our solar system, closest to the Sun."
+        }
+      ],
+      math: [
+        {
+          question: "What is the value of π (pi) approximately?",
+          options: { A: "3.14", B: "3.14159", C: "22/7", D: "All of the above are approximations" },
+          correctAnswer: "D",
+          explanation: "π is an irrational number, so all given options are approximations of its true value."
+        },
+        {
+          question: "What is the Pythagorean theorem?",
+          options: { A: "a + b = c", B: "a² + b² = c²", C: "a × b = c", D: "a - b = c" },
+          correctAnswer: "B",
+          explanation: "The Pythagorean theorem states that in a right triangle, a² + b² = c², where c is the hypotenuse."
+        }
+      ],
+      geography: [
+        {
+          question: "What is the capital of Australia?",
+          options: { A: "Sydney", B: "Melbourne", C: "Canberra", D: "Perth" },
+          correctAnswer: "C",
+          explanation: "Canberra is the capital city of Australia, though Sydney and Melbourne are larger cities."
+        },
+        {
+          question: "Which is the longest river in the world?",
+          options: { A: "Amazon River", B: "Nile River", C: "Mississippi River", D: "Yangtze River" },
+          correctAnswer: "B",
+          explanation: "The Nile River is traditionally considered the longest river in the world at about 6,650 km."
+        }
+      ]
+    };
+  }
+
+  /**
+   * Extract clean topic from prompt that may contain variations
+   */
+  extractTopic(prompt) {
+    // Remove variation suffixes like "[variation: xyz]" and clean up
+    const cleanTopic = prompt.replace(/\s*\[variation:[^\]]*\]/gi, '').trim();
+    
+    // Extract the main topic word
+    const topicWords = cleanTopic.toLowerCase().split(/\s+/);
+    const mainTopic = topicWords[0] || cleanTopic.toLowerCase();
+    
+    return mainTopic;
+  }
+
+  /**
    * Generate intelligent questions using advanced algorithms and local model inspiration
    */
   async generateIntelligentQuestions(topic, count, difficulty, focusArea, modelName) {
     const questions = [];
     const variations = this.getModelVariations(modelName);
     
-    // Generate completely different questions using various strategies
+    // Extract clean topic for better matching
+    const cleanTopic = this.extractTopic(topic);
+    
+    // First, check if we have topic-specific questions in the fallback bank
+    const topicKey = cleanTopic.toLowerCase();
+    const MOCK_QUESTION_BANK = this.getMockQuestionBank();
+    const topicBank = MOCK_QUESTION_BANK[topicKey] || [];
+    
+    // Use a mix of fallback questions and generated questions for better topic relevance
     for (let i = 0; i < count; i++) {
-      const questionStrategy = this.selectQuestionStrategy(i, topic, difficulty);
-      const generatedQuestion = await this.generateQuestionFromStrategy(
-        questionStrategy,
-        topic,
-        difficulty,
-        focusArea,
-        variations,
-        i + 1
-      );
+      let generatedQuestion;
+      
+      // For first half, prefer topic bank questions if available
+      if (i < Math.ceil(count / 2) && topicBank.length > 0) {
+        const bankQuestion = topicBank[i % topicBank.length];
+        generatedQuestion = {
+          ...bankQuestion,
+          id: i + 1,
+          difficulty,
+          topic,
+          category: 'knowledge-based'
+        };
+        
+        // Apply model-specific enhancements
+        generatedQuestion = this.applyIntelligentTransformations(
+          generatedQuestion, variations, difficulty, focusArea, i
+        );
+      } else {
+        // For second half, use strategy-based generation
+        const questionStrategy = this.selectQuestionStrategy(i, topic, difficulty);
+        generatedQuestion = await this.generateQuestionFromStrategy(
+          questionStrategy,
+          topic,
+          difficulty,
+          focusArea,
+          variations,
+          i + 1
+        );
+      }
       
       questions.push(generatedQuestion);
     }
@@ -629,24 +907,12 @@ Now generate ${count} questions about "${topic}":
   }
   
   /**
-   * Vary option ordering and phrasing
+   * Vary option ordering and phrasing (disabled to maintain correct answers)
    */
   varyOptions(options, index) {
-    const keys = Object.keys(options);
-    const values = Object.values(options);
-    
-    // Rotate options based on index to create variety
-    const rotatedValues = [];
-    for (let i = 0; i < values.length; i++) {
-      rotatedValues[i] = values[(i + index) % values.length];
-    }
-    
-    const newOptions = {};
-    keys.forEach((key, i) => {
-      newOptions[key] = rotatedValues[i];
-    });
-    
-    return newOptions;
+    // Return original options without rotation to preserve correct answer mapping
+    // Rotation was causing incorrect answer mappings
+    return options;
   }
   
   /**
