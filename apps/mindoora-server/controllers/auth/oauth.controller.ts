@@ -56,7 +56,10 @@ export const oauthLoginController = async (req: Request<{}, {}, OAuthUserData>, 
       // Update access token
       const jwtSecret = process.env.JWT_SECRETE || process.env.JWT_SECRET || 'fallback-secret';
       const token = jwt.sign(
-        { email: existingUser.email },
+        { 
+          email: existingUser.email,
+          userId: existingUser.id
+        },
         jwtSecret,
         { expiresIn: '86400s' }
       )
