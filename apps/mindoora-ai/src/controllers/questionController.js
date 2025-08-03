@@ -26,9 +26,9 @@ const generateQuestionsSchema = Joi.object({
     .messages({
       'any.only': 'Question types must be one of: multiple-choice, true-false, fill-blank, short-answer'
     }),
-  provider: Joi.string().valid('openai', 'huggingface', 'googleai', 't5').optional()
+  provider: Joi.string().valid('openai', 'huggingface', 'googleai', 't5', 'local').optional()
     .messages({
-      'any.only': 'Provider must be one of: openai, huggingface, googleai, t5'
+      'any.only': 'Provider must be one of: openai, huggingface, googleai, t5, local'
     }),
   useCache: Joi.boolean().default(true),
 });
@@ -85,6 +85,28 @@ class QuestionController {
         questionCount: result.questions.length,
         provider: provider || config.ai.defaultProvider,
       });
+
+      // Detailed console logging for mobile app debugging
+      console.log('\n=== QUESTION GENERATION RESULT ===');
+      console.log('Request Info:', {
+        prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
+        count,
+        difficulty,
+        provider: provider || config.ai.defaultProvider,
+        timestamp: new Date().toISOString()
+      });
+      console.log('\nGenerated Questions:');
+      result.questions.forEach((q, index) => {
+        console.log(`\n--- Question ${index + 1} ---`);
+        console.log('Question:', q.question);
+        console.log('Options:', q.options);
+        console.log('Correct Answer:', q.correctAnswer);
+        console.log('Explanation:', q.explanation);
+        console.log('Difficulty:', q.difficulty);
+        console.log('Topic:', q.topic);
+      });
+      console.log('\nMetadata:', result.metadata);
+      console.log('=== END RESULT ===\n');
 
       res.json({
         success: true,

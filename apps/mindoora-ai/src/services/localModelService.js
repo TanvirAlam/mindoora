@@ -34,8 +34,8 @@ const LOCAL_MODELS = {
   }
 };
 
-// Fallback order for models when one fails (most reliable first)
-const MODEL_FALLBACK_ORDER = ['gpt2', 'distilgpt2', 'flan-t5-small'];
+// Fallback order for models when one fails (best for Q&A first)
+const MODEL_FALLBACK_ORDER = ['flan-t5-small', 'gpt2', 'distilgpt2'];
 
 class LocalModelService {
   constructor() {
@@ -141,14 +141,96 @@ class LocalModelService {
   }
 
   /**
-   * Generate questions with intelligent model-aware approach
+   * Generate questions using the actual AI model
+   */
+  async generateWithRealModel(modelName, prompt, count, difficulty, focusArea) {
+    logger.info(`Attempting to use real AI model: ${modelName}`);
+    
+    try {
+      // Import transformers.js dynamically
+      const { pipeline } = await import('@xenova/transformers');
+      
+      // Use the T5 model for text generation (best for Q&A tasks)
+      const modelPath = modelName === 'flan-t5-small' ? 'Xenova/flan-t5-small' : `Xenova/${modelName}`;
+      
+      // Create or get cached pipeline
+      if (!this.pipelines.has(modelName)) {
+        logger.info(`Loading AI model pipeline: ${modelPath}`);
+        const generator = await pipeline('text2text-generation', modelPath, {
+          local_files_only: false,
+          cache_dir: this.modelPath
+        });
+        this.pipelines.set(modelName, generator);
+      }
+      
+      const generator = this.pipelines.get(modelName);
+      
+      // Build a proper instruction prompt for the T5 model
+      const instructionPrompt = this.buildInstructionPrompt(prompt, count, difficulty, focusArea);
+      
+      logger.info('Generating questions with real AI model...');
+      const result = await generator(instructionPrompt, {
+        max_length: 1024,
+        temperature: 0.7,
+        do_sample: true,
+        num_return_sequences: 1
+      });
+      
+      const generatedText = result[0].generated_text || result.generated_text || '';
+      logger.info('AI model generated text length:', generatedText.length);
+      
+      // Parse the generated questions
+      const questions = this.parseQuestions(generatedText, prompt);
+      
+      // If parsing fails or no questions found, return null to trigger fallback
+      if (!questions || questions.length === 0) {
+        logger.warn('AI model generated text but no valid questions could be parsed');
+        return null;
+      }
+      
+      logger.info(`Successfully parsed ${questions.length} questions from AI model`);
+      return questions;
+      
+    } catch (error) {
+      logger.error('Real AI model failed:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate questions with real AI model
    */
   async generateWithLocalModel(modelName, prompt, count, difficulty, focusArea) {
-    logger.info(`Using intelligent question generation for model: ${modelName}`);
+    logger.info(`Using real AI model for question generation: ${modelName}`);
     
     const startTime = Date.now();
     
-    // Generate intelligent questions based on the topic and model capabilities
+    try {
+      // Try to use the actual AI model first
+      const questions = await this.generateWithRealModel(modelName, prompt, count, difficulty, focusArea);
+      
+      if (questions && questions.length > 0) {
+        const duration = Date.now() - startTime;
+        const result = {
+          questions,
+          metadata: {
+            generated_at: new Date().toISOString(),
+            count: questions.length,
+            provider: 'local-ai',
+            model: modelName,
+            duration: `${duration}ms`,
+            note: `Generated using real ${modelName} AI model`,
+          },
+        };
+        
+        logger.info(`Successfully generated ${questions.length} questions with real AI model: ${modelName}`);
+        return result;
+      }
+    } catch (error) {
+      logger.warn(`Real AI model ${modelName} failed, falling back to intelligent questions:`, error.message);
+    }
+    
+    // Fallback to intelligent questions if real model fails
     const questions = await this.generateIntelligentQuestions(prompt, count, difficulty, focusArea, modelName);
     
     const duration = Date.now() - startTime;
@@ -398,14 +480,14 @@ Now generate ${count} questions about "${topic}":
         },
         {
           question: "When did World War II end?",
-          options: { A: "1944", B: "1945", C: "1946", D: "1947" },
-          correctAnswer: "B",
+          options: { A: "1945", B: "1946", C: "1947", D: "1944" },
+          correctAnswer: "A",
           explanation: "World War II ended in 1945 with Japan's surrender in September."
         },
         {
           question: "Which empire was ruled by Julius Caesar?",
-          options: { A: "Greek Empire", B: "Roman Empire", C: "Persian Empire", D: "Ottoman Empire" },
-          correctAnswer: "B",
+          options: { A: "Greek Empire", B: "Persian Empire", C: "Ottoman Empire", D: "Roman Empire" },
+          correctAnswer: "D",
           explanation: "Julius Caesar was a Roman general and statesman who played a critical role in the Roman Empire."
         }
       ],
@@ -655,14 +737,31 @@ Now generate ${count} questions about "${topic}":
   }
 
   /**
+   * Extract clean topic from prompt that may contain variations
+   */
+  extractTopic(prompt) {
+    // Remove variation suffixes like "[variation: xyz]" and clean up
+    const cleanTopic = prompt.replace(/\s*\[variation:[^\]]*\]/gi, '').trim();
+    
+    // Extract the main topic word
+    const topicWords = cleanTopic.toLowerCase().split(/\s+/);
+    const mainTopic = topicWords[0] || cleanTopic.toLowerCase();
+    
+    return mainTopic;
+  }
+
+  /**
    * Generate intelligent questions using advanced algorithms and local model inspiration
    */
   async generateIntelligentQuestions(topic, count, difficulty, focusArea, modelName) {
     const questions = [];
     const variations = this.getModelVariations(modelName);
     
+    // Extract clean topic for better matching
+    const cleanTopic = this.extractTopic(topic);
+    
     // First, check if we have topic-specific questions in the fallback bank
-    const topicKey = topic.toLowerCase();
+    const topicKey = cleanTopic.toLowerCase();
     const MOCK_QUESTION_BANK = this.getMockQuestionBank();
     const topicBank = MOCK_QUESTION_BANK[topicKey] || [];
     
@@ -808,24 +907,12 @@ Now generate ${count} questions about "${topic}":
   }
   
   /**
-   * Vary option ordering and phrasing
+   * Vary option ordering and phrasing (disabled to maintain correct answers)
    */
   varyOptions(options, index) {
-    const keys = Object.keys(options);
-    const values = Object.values(options);
-    
-    // Rotate options based on index to create variety
-    const rotatedValues = [];
-    for (let i = 0; i < values.length; i++) {
-      rotatedValues[i] = values[(i + index) % values.length];
-    }
-    
-    const newOptions = {};
-    keys.forEach((key, i) => {
-      newOptions[key] = rotatedValues[i];
-    });
-    
-    return newOptions;
+    // Return original options without rotation to preserve correct answer mapping
+    // Rotation was causing incorrect answer mappings
+    return options;
   }
   
   /**
