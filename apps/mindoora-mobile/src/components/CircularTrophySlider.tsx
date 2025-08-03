@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import trophyService from '../services/trophyService';
+import TrophyBuilder from './TrophyBuilder';
 
 interface Trophy {
   id: string;
@@ -177,6 +178,7 @@ const [userTrophies, setUserTrophies] = useState<Trophy[]>([]);
     blob: Blob | null;
     uri: string | null;
   }>({ blob: null, uri: null });
+  const [showTrophyBuilder, setShowTrophyBuilder] = useState(false);
   useEffect(() => {
     Animated.timing(backgroundOpacity, {
       toValue: 1,
@@ -589,7 +591,7 @@ const [userTrophies, setUserTrophies] = useState<Trophy[]>([]);
                     <Text style={styles.buttonText}>Upload PNG</Text>
                   </TouchableOpacity>
                   
-                  <TouchableOpacity style={styles.customButton} onPress={() => console.log('Create trophy')}>
+                  <TouchableOpacity style={styles.customButton} onPress={() => setShowTrophyBuilder(true)}>
                     <View style={styles.buttonIcon}>
                       <Text style={styles.buttonIconText}>🎨</Text>
                     </View>
@@ -746,6 +748,26 @@ const [userTrophies, setUserTrophies] = useState<Trophy[]>([]);
           {activeIndex + 1} / {allTrophiesState.length}
         </Text>
       </View>
+
+      {/* TrophyBuilder Modal */}
+      {showTrophyBuilder && (
+        <Modal transparent={true} animationType="slide" visible={showTrophyBuilder}>
+          <View style={styles.trophyBuilderModal}>
+            <View style={styles.trophyBuilderHeader}>
+              <Text style={styles.trophyBuilderTitle}>3D Trophy Builder</Text>
+              <TouchableOpacity 
+                onPress={() => setShowTrophyBuilder(false)} 
+                style={styles.trophyBuilderCloseButton}
+              >
+                <Text style={styles.trophyBuilderCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.trophyBuilderContent}>
+              <TrophyBuilder />
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 };
@@ -1231,6 +1253,43 @@ bottomTrophyIcon: {
   deleteButton: {
     backgroundColor: 'rgba(255, 82, 82, 0.3)',
     borderColor: '#ff5252',
+  },
+  // TrophyBuilder Modal styles
+  trophyBuilderModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+  },
+  trophyBuilderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  trophyBuilderTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  trophyBuilderCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  trophyBuilderCloseText: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  trophyBuilderContent: {
+    flex: 1,
+    width: '100%',
   },
 });
 
