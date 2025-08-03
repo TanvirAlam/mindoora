@@ -501,23 +501,202 @@ Now generate ${count} questions about "${topic}":
   }
 
   /**
+   * Get the mock question bank for reuse in intelligent generation
+   */
+  getMockQuestionBank() {
+    return {
+      javascript: [
+        {
+          question: "What is the correct way to declare a variable in JavaScript?",
+          options: { A: "var myVar;", B: "let myVar;", C: "const myVar;", D: "All of the above" },
+          correctAnswer: "D",
+          explanation: "`var`, `let`, and `const` are all valid ways to declare variables in JavaScript, each with different scoping rules."
+        },
+        {
+          question: "Which of these is NOT a primitive data type in JavaScript?",
+          options: { A: "String", B: "Number", C: "Object", D: "Boolean" },
+          correctAnswer: "C",
+          explanation: "Object is a composite data type, not a primitive type."
+        },
+        {
+          question: "What does the '===' operator do in JavaScript?",
+          options: { A: "Checks for equality only", B: "Checks for strict equality (value and type)", C: "Assigns a value", D: "Compares references" },
+          correctAnswer: "B",
+          explanation: "The '===' operator checks for strict equality, comparing both value and type without type coercion."
+        }
+      ],
+      python: [
+        {
+          question: "Which of these is the correct way to create a list in Python?",
+          options: { A: "list = {1, 2, 3}", B: "list = [1, 2, 3]", C: "list = (1, 2, 3)", D: "list = <1, 2, 3>" },
+          correctAnswer: "B",
+          explanation: "Square brackets [] are used to create lists in Python."
+        },
+        {
+          question: "What does the 'len()' function do in Python?",
+          options: { A: "Returns the length of an object", B: "Creates a new list", C: "Sorts a list", D: "Removes an element" },
+          correctAnswer: "A",
+          explanation: "The len() function returns the number of items in an object (list, string, tuple, etc.)."
+        }
+      ],
+      react: [
+        {
+          question: "What is JSX in React?",
+          options: { A: "A JavaScript library", B: "A syntax extension for JavaScript", C: "A CSS framework", D: "A database" },
+          correctAnswer: "B",
+          explanation: "JSX is a syntax extension for JavaScript that allows you to write HTML-like code in your JavaScript files."
+        },
+        {
+          question: "Which hook is used to manage state in functional components?",
+          options: { A: "useEffect", B: "useContext", C: "useState", D: "useReducer" },
+          correctAnswer: "C",
+          explanation: "The useState hook is the primary way to add state to functional components in React."
+        }
+      ],
+      history: [
+        {
+          question: "Who was the first President of the United States?",
+          options: { A: "Thomas Jefferson", B: "Abraham Lincoln", C: "George Washington", D: "John Adams" },
+          correctAnswer: "C",
+          explanation: "George Washington was the first President, serving from 1789 to 1797."
+        },
+        {
+          question: "When did World War II end?",
+          options: { A: "1944", B: "1945", C: "1946", D: "1947" },
+          correctAnswer: "B",
+          explanation: "World War II ended in 1945 with Japan's surrender in September."
+        },
+        {
+          question: "Which empire was ruled by Julius Caesar?",
+          options: { A: "Greek Empire", B: "Roman Empire", C: "Persian Empire", D: "Ottoman Empire" },
+          correctAnswer: "B",
+          explanation: "Julius Caesar was a Roman general and statesman who played a critical role in the Roman Empire."
+        },
+        {
+          question: "Which ancient civilization built the pyramids of Giza?",
+          options: { A: "Romans", B: "Greeks", C: "Egyptians", D: "Babylonians" },
+          correctAnswer: "C",
+          explanation: "The pyramids of Giza were built by the ancient Egyptians as tombs for their pharaohs around 2580-2510 BCE."
+        },
+        {
+          question: "What was the main cause of World War I?",
+          options: { A: "Economic depression", B: "Assassination of Archduke Franz Ferdinand", C: "Religious conflicts", D: "Colonial disputes only" },
+          correctAnswer: "B",
+          explanation: "The assassination of Archduke Franz Ferdinand of Austria-Hungary in 1914 triggered the complex web of alliances that led to World War I."
+        },
+        {
+          question: "Which revolution began in 1789?",
+          options: { A: "American Revolution", B: "Russian Revolution", C: "French Revolution", D: "Industrial Revolution" },
+          correctAnswer: "C",
+          explanation: "The French Revolution began in 1789 and fundamentally changed French society and had lasting impacts on world history."
+        },
+        {
+          question: "Who was known as the 'Iron Lady'?",
+          options: { A: "Queen Elizabeth I", B: "Margaret Thatcher", C: "Catherine the Great", D: "Golda Meir" },
+          correctAnswer: "B",
+          explanation: "Margaret Thatcher, the UK Prime Minister from 1979-1990, was nicknamed the 'Iron Lady' for her uncompromising political style."
+        },
+        {
+          question: "Which war was fought between 1861-1865 in the United States?",
+          options: { A: "Revolutionary War", B: "War of 1812", C: "Civil War", D: "Spanish-American War" },
+          correctAnswer: "C",
+          explanation: "The American Civil War (1861-1865) was fought between the Union and Confederate states over slavery and states' rights."
+        }
+      ],
+      science: [
+        {
+          question: "What is the chemical symbol for water?",
+          options: { A: "H2O", B: "CO2", C: "O2", D: "NaCl" },
+          correctAnswer: "A",
+          explanation: "Water is composed of two hydrogen atoms and one oxygen atom, hence H2O."
+        },
+        {
+          question: "What is the speed of light in vacuum?",
+          options: { A: "300,000 km/s", B: "299,792,458 m/s", C: "186,000 miles/s", D: "Both A and B" },
+          correctAnswer: "D",
+          explanation: "The speed of light is approximately 300,000 km/s or exactly 299,792,458 m/s."
+        },
+        {
+          question: "Which planet is closest to the Sun?",
+          options: { A: "Venus", B: "Earth", C: "Mercury", D: "Mars" },
+          correctAnswer: "C",
+          explanation: "Mercury is the innermost planet in our solar system, closest to the Sun."
+        }
+      ],
+      math: [
+        {
+          question: "What is the value of π (pi) approximately?",
+          options: { A: "3.14", B: "3.14159", C: "22/7", D: "All of the above are approximations" },
+          correctAnswer: "D",
+          explanation: "π is an irrational number, so all given options are approximations of its true value."
+        },
+        {
+          question: "What is the Pythagorean theorem?",
+          options: { A: "a + b = c", B: "a² + b² = c²", C: "a × b = c", D: "a - b = c" },
+          correctAnswer: "B",
+          explanation: "The Pythagorean theorem states that in a right triangle, a² + b² = c², where c is the hypotenuse."
+        }
+      ],
+      geography: [
+        {
+          question: "What is the capital of Australia?",
+          options: { A: "Sydney", B: "Melbourne", C: "Canberra", D: "Perth" },
+          correctAnswer: "C",
+          explanation: "Canberra is the capital city of Australia, though Sydney and Melbourne are larger cities."
+        },
+        {
+          question: "Which is the longest river in the world?",
+          options: { A: "Amazon River", B: "Nile River", C: "Mississippi River", D: "Yangtze River" },
+          correctAnswer: "B",
+          explanation: "The Nile River is traditionally considered the longest river in the world at about 6,650 km."
+        }
+      ]
+    };
+  }
+
+  /**
    * Generate intelligent questions using advanced algorithms and local model inspiration
    */
   async generateIntelligentQuestions(topic, count, difficulty, focusArea, modelName) {
     const questions = [];
     const variations = this.getModelVariations(modelName);
     
-    // Generate completely different questions using various strategies
+    // First, check if we have topic-specific questions in the fallback bank
+    const topicKey = topic.toLowerCase();
+    const MOCK_QUESTION_BANK = this.getMockQuestionBank();
+    const topicBank = MOCK_QUESTION_BANK[topicKey] || [];
+    
+    // Use a mix of fallback questions and generated questions for better topic relevance
     for (let i = 0; i < count; i++) {
-      const questionStrategy = this.selectQuestionStrategy(i, topic, difficulty);
-      const generatedQuestion = await this.generateQuestionFromStrategy(
-        questionStrategy,
-        topic,
-        difficulty,
-        focusArea,
-        variations,
-        i + 1
-      );
+      let generatedQuestion;
+      
+      // For first half, prefer topic bank questions if available
+      if (i < Math.ceil(count / 2) && topicBank.length > 0) {
+        const bankQuestion = topicBank[i % topicBank.length];
+        generatedQuestion = {
+          ...bankQuestion,
+          id: i + 1,
+          difficulty,
+          topic,
+          category: 'knowledge-based'
+        };
+        
+        // Apply model-specific enhancements
+        generatedQuestion = this.applyIntelligentTransformations(
+          generatedQuestion, variations, difficulty, focusArea, i
+        );
+      } else {
+        // For second half, use strategy-based generation
+        const questionStrategy = this.selectQuestionStrategy(i, topic, difficulty);
+        generatedQuestion = await this.generateQuestionFromStrategy(
+          questionStrategy,
+          topic,
+          difficulty,
+          focusArea,
+          variations,
+          i + 1
+        );
+      }
       
       questions.push(generatedQuestion);
     }
