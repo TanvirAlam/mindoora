@@ -369,6 +369,23 @@ const CircularTrophySlider: React.FC<CircularTrophySliderProps> = ({ onClose }) 
                 {allTrophies[activeIndex]?.rarity?.toUpperCase()}
               </Text>
             </View>
+            
+            {/* Custom Trophy Buttons */}
+            <View style={styles.customTrophyButtons}>
+              <TouchableOpacity style={styles.customButton} onPress={() => console.log('Upload trophy')}>
+                <View style={styles.buttonIcon}>
+                  <Text style={styles.buttonIconText}>📁</Text>
+                </View>
+                <Text style={styles.buttonText}>Upload PNG</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.customButton} onPress={() => console.log('Create trophy')}>
+                <View style={styles.buttonIcon}>
+                  <Text style={styles.buttonIconText}>🎨</Text>
+                </View>
+                <Text style={styles.buttonText}>Create Trophy</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </Animated.View>
       </View>
@@ -502,7 +519,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 100,
-    paddingBottom: 200,
+    paddingBottom: 280,
   },
   centerTrophyDisplay: {
     alignItems: 'center',
@@ -568,6 +585,46 @@ mainTrophyImage: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#333',
+  },
+  // Custom Trophy Buttons
+  customTrophyButtons: {
+    flexDirection: 'row',
+    marginTop: 25,
+    gap: 15,
+    justifyContent: 'center',
+  },
+  customButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: 'rgba(0, 0, 0, 0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  buttonIcon: {
+    marginRight: 8,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  buttonIconText: {
+    fontSize: 16,
+  },
+  buttonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   // Bottom Trophy Selector
   bottomTrophySelector: {
