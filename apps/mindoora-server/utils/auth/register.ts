@@ -15,7 +15,8 @@ export const createUser = async (userData: any) => {
 export const createAccessToken = async (register: any) => {
   const token = jwt.sign(
     {
-      email: register.email
+      email: register.email,
+      userId: register.id
     },
     process.env.JWT_SECRETE,
     { expiresIn: '1h' }

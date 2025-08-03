@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,14 @@ import {
   TouchableOpacity,
   Animated,
   ImageBackground,
+  Alert,
+  TextInput,
+  Modal,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import trophyService from '../services/trophyService';
 
 interface Trophy {
   id: string;
@@ -18,6 +25,8 @@ interface Trophy {
   rarity: 'bronze' | 'silver' | 'gold' | 'platinum';
   description: string;
   backgroundGradient: string[];
+  isCustom?: boolean; // Flag to identify uploaded trophies
+  imagePath?: string; // Store the file path for deletion
 }
 
 interface CircularTrophySliderProps {
@@ -157,13 +166,53 @@ const CircularTrophySlider: React.FC<CircularTrophySliderProps> = ({ onClose }) 
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const backgroundOpacity = useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
+  const [allTrophiesState, setAllTrophiesState] = useState<Trophy[]>(allTrophies);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newTrophyName, setNewTrophyName] = useState('');
+  const [newTrophyDescription, setNewTrophyDescription] = useState('');
+  const [selectedRarity, setSelectedRarity] = useState<'bronze' | 'silver' | 'gold' | 'platinum'>('gold');
+const [userTrophies, setUserTrophies] = useState<Trophy[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [tempImageData, setTempImageData] = useState<{
+    blob: Blob | null;
+    uri: string | null;
+  }>({ blob: null, uri: null });
+  useEffect(() => {
     Animated.timing(backgroundOpacity, {
       toValue: 1,
       duration: 800,
       useNativeDriver: true,
     }).start();
+
+    const fetchTrophies = async () => {
+      try {
+        const backendTrophies = await trophyService.getUserTrophies();
+        console.log('✅ Backend trophies:', backendTrophies);
+        
+        // Convert backend trophies to the format expected by the component
+        const convertedTrophies = backendTrophies.map((trophy: any) => ({
+          id: trophy.id,
+          name: trophy.name,
+          image: { uri: `http://127.0.0.1:8080${trophy.imageUrl}` },
+          rarity: trophy.trophyRank,
+          description: trophy.description || 'Custom trophy',
+          backgroundGradient: ['#a8edea', '#fed6e3'],
+          isCustom: true,
+          imagePath: trophy.imageUrl,
+          serverTrophyId: trophy.id, // Store server trophy ID for deletion
+        }));
+        
+        // Combine static trophies with backend trophies
+        setAllTrophiesState([...allTrophies, ...convertedTrophies]);
+        console.log('✅ Trophies loaded successfully');
+      } catch (error) {
+        console.error('❌ Failed to fetch trophies:', error);
+        // Fall back to static trophies only
+        setAllTrophiesState(allTrophies);
+      }
+    };
+
+    fetchTrophies();
   }, []);
 
   const getRarityColor = (rarity: string) => {
@@ -187,8 +236,8 @@ const CircularTrophySlider: React.FC<CircularTrophySliderProps> = ({ onClose }) 
   };
 
   const getCurrentBackgroundGradient = () => {
-    const inputRange = allTrophies.map((_, i) => i * ITEM_SIZE);
-    const outputRange = allTrophies.map(trophy => trophy.backgroundGradient[0]);
+    const inputRange = allTrophiesState.map((_, i) => i * ITEM_SIZE);
+    const outputRange = allTrophiesState.map(trophy => trophy.backgroundGradient[0]);
     
     return scrollX.interpolate({
       inputRange,
@@ -312,6 +361,154 @@ const CircularTrophySlider: React.FC<CircularTrophySliderProps> = ({ onClose }) 
     });
   };
 
+  const deleteCustomTrophy = async (trophy: Trophy) => {
+    Alert.alert(
+      'Delete Trophy',
+      'Are you sure you want to delete this custom trophy?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Check if this is a server trophy (has serverTrophyId) or local trophy
+              const hasServerTrophyId = (trophy as any).serverTrophyId;
+              
+              if (hasServerTrophyId) {
+                // This is a server trophy - delete via API
+                console.log('🗑️ Deleting server trophy:', (trophy as any).serverTrophyId);
+                await trophyService.deleteTrophy((trophy as any).serverTrophyId);
+                console.log('✅ Server trophy deleted successfully');
+              } else {
+                // This is a local trophy - delete the image file from storage
+                if (trophy.imagePath && trophy.imagePath.startsWith(FileSystem.documentDirectory || '')) {
+                  console.log('🗑️ Deleting local file:', trophy.imagePath);
+                  await FileSystem.deleteAsync(trophy.imagePath);
+                  console.log('✅ Local file deleted successfully');
+                }
+              }
+              
+              // Remove trophy from state
+              const updatedTrophies = allTrophiesState.filter(t => t.id !== trophy.id);
+              setAllTrophiesState(updatedTrophies);
+              
+              // If the deleted trophy was active, navigate to the first trophy
+              if (activeIndex >= updatedTrophies.length) {
+                setActiveIndex(Math.max(0, updatedTrophies.length - 1));
+              }
+              
+              Alert.alert('Success', 'Trophy deleted successfully!');
+            } catch (error) {
+              console.error('❌ Failed to delete trophy:', error);
+              Alert.alert('Error', `Failed to delete the trophy: ${error.message || 'Please try again.'}`);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const pickImageAndUpload = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (permissionResult.granted === false) {
+      Alert.alert("Permission Denied", "You've refused to allow this app to access your photos!");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      try {
+        const imageUri = result.assets[0].uri;
+        const fileName = imageUri.split('/').pop();
+        const userName = 'user_name'; // Placeholder for username
+        const destinationUri = `${FileSystem.documentDirectory}assets/users/${userName}/${fileName}`;
+
+        // Ensure directory exists
+        await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}assets/users/${userName}`, { intermediates: true });
+
+        // Copy image to destination
+        await FileSystem.copyAsync({ from: imageUri, to: destinationUri });
+
+        const uploadImage = await FileSystem.readAsStringAsync(destinationUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        // Create FormData for the API request
+        const formData = new FormData();
+        formData.append('image_file_b64', uploadImage);
+        formData.append('size', 'auto');
+
+        // Use remove.bg API for background removal
+        const response = await fetch('https://api.remove.bg/v1.0/removebg', {
+          method: 'POST',
+          headers: {
+            'X-Api-Key': process.env.EXPO_PUBLIC_REMOVE_BG_API_KEY,
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Image processing failed: ${response.status}`);
+        }
+
+        // Get the processed image as base64
+        const processedImageBlob = await response.blob();
+        const reader = new FileReader();
+        
+        const base64Result = await new Promise((resolve, reject) => {
+          reader.onloadend = () => {
+            const base64Data = reader.result as string;
+            // Remove the data URL prefix to get just the base64 string
+            const base64String = base64Data.split(',')[1];
+            resolve(base64String);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(processedImageBlob);
+        });
+
+        const processedImageUri = `${FileSystem.documentDirectory}assets/users/${userName}/processed_${fileName}`;
+        await FileSystem.writeAsStringAsync(processedImageUri, base64Result as string, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        const newTrophy: Trophy = {
+          id: String(allTrophiesState.length + 1),
+          name: 'Custom Trophy',
+          image: { uri: processedImageUri },
+          rarity: 'bronze',
+          description: 'Custom uploaded image',
+          backgroundGradient: ['#a8edea', '#fed6e3'],
+          isCustom: true,
+          imagePath: processedImageUri,
+        };
+
+        setAllTrophiesState([...allTrophiesState, newTrophy]);
+        
+        // Store image data for later use in form submission
+        setTempImageData({
+          blob: processedImageBlob,
+          uri: processedImageUri
+        });
+        
+        // Show form to input additional details
+        setNewTrophyName('');
+        setNewTrophyDescription('');
+        setShowForm(true);
+      } catch (error) {
+        console.error('Failed to upload image', error);
+        Alert.alert('Error', 'An error occurred while uploading the image.');
+      }
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Immersive 3D Background */}
@@ -346,12 +543,12 @@ const CircularTrophySlider: React.FC<CircularTrophySliderProps> = ({ onClose }) 
             style={[
               styles.mainTrophyFrame,
               {
-                shadowColor: getRarityGlow(allTrophies[activeIndex]?.rarity || 'gold'),
+                shadowColor: getRarityGlow(allTrophiesState[activeIndex]?.rarity || 'gold'),
               },
             ]}
           >
             <Image 
-              source={allTrophies[activeIndex]?.image} 
+              source={allTrophiesState[activeIndex]?.image} 
               style={styles.mainTrophyImage} 
             />
           </View>
@@ -359,24 +556,148 @@ const CircularTrophySlider: React.FC<CircularTrophySliderProps> = ({ onClose }) 
           {/* Trophy Info */}
           <View style={styles.mainTrophyInfo}>
             <Text style={styles.mainTrophyName}>
-              {allTrophies[activeIndex]?.name}
+{allTrophiesState[activeIndex]?.isCustom && `Custom Trophy: `}{allTrophiesState[activeIndex]?.name}
             </Text>
             <Text style={styles.mainTrophyDescription}>
-              {allTrophies[activeIndex]?.description}
+              {allTrophiesState[activeIndex]?.description}
             </Text>
-            <View style={[styles.mainRarityBadge, { backgroundColor: getRarityColor(allTrophies[activeIndex]?.rarity || 'gold') }]}>
+            <View style={[styles.mainRarityBadge, { backgroundColor: getRarityColor(allTrophiesState[activeIndex]?.rarity || 'gold') }]}>
               <Text style={styles.mainRarityText}>
-                {allTrophies[activeIndex]?.rarity?.toUpperCase()}
+                {allTrophiesState[activeIndex]?.rarity?.toUpperCase()}
               </Text>
+            </View>
+            
+            {/* Custom Trophy Buttons */}
+            <View style={styles.customTrophyButtons}>
+              {/* Show Delete button only for custom trophies */}
+              {allTrophiesState[activeIndex]?.isCustom ? (
+                <TouchableOpacity 
+                  style={[styles.customButton, styles.deleteButton]} 
+                  onPress={() => deleteCustomTrophy(allTrophiesState[activeIndex])}
+                >
+                  <View style={styles.buttonIcon}>
+                    <Text style={styles.buttonIconText}>🗑️</Text>
+                  </View>
+                  <Text style={styles.buttonText}>Delete</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity style={styles.customButton} onPress={pickImageAndUpload}>
+                    <View style={styles.buttonIcon}>
+                      <Text style={styles.buttonIconText}>📁</Text>
+                    </View>
+                    <Text style={styles.buttonText}>Upload PNG</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity style={styles.customButton} onPress={() => console.log('Create trophy')}>
+                    <View style={styles.buttonIcon}>
+                      <Text style={styles.buttonIconText}>🎨</Text>
+                    </View>
+                    <Text style={styles.buttonText}>Create Trophy</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
         </Animated.View>
       </View>
 
-      {/* Bottom Circular Trophy Selector */}
+{/* Form to add trophy details */}
+      {showForm && (
+        	<Modal transparent={true} animationType="slide">
+            <View style={styles.formContainer}>
+              <Text style={styles.formTitle}>Add Trophy Details</Text>
+
+              <TextInput
+                style={styles.input}
+                placeholder="Trophy Name"
+                placeholderTextColor="#cccccc"
+                value={newTrophyName}
+                onChangeText={setNewTrophyName}
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Description"
+                placeholderTextColor="#cccccc"
+                value={newTrophyDescription}
+                onChangeText={setNewTrophyDescription}
+              />
+
+              <View style={styles.rarityPicker}>
+                {['bronze', 'silver', 'gold', 'platinum'].map((r) => (
+                  <TouchableOpacity key={r} onPress={() => setSelectedRarity(r)} style={[styles.rarityOption, selectedRarity === r && styles.selectedRarityOption]}>
+                    <Text style={[styles.rarityText, selectedRarity === r && styles.selectedRarityText]}>{r.toUpperCase()}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={async () => {
+                  if (!newTrophyName || !newTrophyDescription) {
+                    Alert.alert('Error', 'Please fill all fields.');
+                    return;
+                  }
+                  // Close form and reset fields
+                  // Here we would call the API to save the trophy
+                  // For now, let's update the existing trophy that was created during image upload
+                  const currentTrophy = allTrophiesState[allTrophiesState.length - 1];
+                  if (currentTrophy && currentTrophy.isCustom) {
+                    const updatedTrophy = {
+                      ...currentTrophy,
+                      name: newTrophyName,
+                      description: newTrophyDescription,
+                      rarity: selectedRarity,
+                    };
+                    
+                    const updatedTrophies = [...allTrophiesState];
+                    updatedTrophies[updatedTrophies.length - 1] = updatedTrophy;
+                    setAllTrophiesState(updatedTrophies);
+
+                    // Save to database
+                    if (tempImageData.blob && tempImageData.uri) {
+                      try {
+                        // Create a proper image file object from the processed image
+                        const imageFile = {
+                          uri: tempImageData.uri,
+                          type: 'image/png',
+                          name: `${newTrophyName.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.png`
+                        } as any;
+                        
+                        await trophyService.createTrophy({
+                          name: newTrophyName,
+                          description: newTrophyDescription,
+                          trophyRank: selectedRarity,
+                          imageSrc: tempImageData.uri
+                        }, imageFile);
+                        console.log('✅ Trophy saved to database successfully');
+                      } catch (error) {
+                        console.error('❌ Failed to save trophy to database:', error);
+                        Alert.alert('Warning', 'Trophy created locally but failed to save to server. Please check your internet connection.');
+                      }
+                    }
+                  }
+                  
+                  setShowForm(false);
+                  Alert.alert('Success', 'Trophy created successfully with your custom details!');
+                }}
+              >
+                <Text style={styles.submitButtonText}>Submit</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => setShowForm(false)} style={styles.cancelButton}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </Modal>
+      )}
+
+      
+{/* Bottom Circular Trophy Selector */}
       <View style={styles.bottomTrophySelector}>
         <FlatList
-          data={allTrophies}
+          data={allTrophiesState}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.bottomTrophyList}
@@ -417,12 +738,12 @@ const CircularTrophySlider: React.FC<CircularTrophySliderProps> = ({ onClose }) 
           <Animated.View 
             style={[
               styles.progressFill,
-              { width: `${((activeIndex + 1) / allTrophies.length) * 100}%` }
+              { width: `${((activeIndex + 1) / allTrophiesState.length) * 100}%` }
             ]} 
           />
         </View>
         <Text style={styles.progressText}>
-          {activeIndex + 1} / {allTrophies.length}
+          {activeIndex + 1} / {allTrophiesState.length}
         </Text>
       </View>
     </View>
@@ -502,7 +823,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 100,
-    paddingBottom: 200,
+    paddingBottom: 280,
   },
   centerTrophyDisplay: {
     alignItems: 'center',
@@ -568,6 +889,46 @@ mainTrophyImage: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#333',
+  },
+  // Custom Trophy Buttons
+  customTrophyButtons: {
+    flexDirection: 'row',
+    marginTop: 25,
+    gap: 15,
+    justifyContent: 'center',
+  },
+  customButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: 'rgba(0, 0, 0, 0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  buttonIcon: {
+    marginRight: 8,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  buttonIconText: {
+    fontSize: 16,
+  },
+  buttonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   // Bottom Trophy Selector
   bottomTrophySelector: {
@@ -783,6 +1144,93 @@ bottomTrophyIcon: {
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.8)',
     fontWeight: '600',
+  },
+  // Form styles
+  formContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    padding: 20,
+  },
+  formTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 30,
+    textAlign: 'center',
+  },
+  input: {
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 15,
+    padding: 15,
+    fontSize: 16,
+    color: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginBottom: 20,
+  },
+  rarityPicker: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 30,
+    width: '100%',
+  },
+  rarityOption: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    flex: 1,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  selectedRarityOption: {
+    borderColor: '#FFD700',
+    backgroundColor: 'rgba(255, 215, 0, 0.2)',
+  },
+  rarityText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  selectedRarityText: {
+    color: '#FFD700',
+  },
+  submitButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 40,
+    paddingVertical: 15,
+    borderRadius: 25,
+    marginBottom: 15,
+    width: '100%',
+    alignItems: 'center',
+  },
+  submitButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  cancelButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 40,
+    paddingVertical: 15,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    width: '100%',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: '#fff',
+  },
+  deleteButton: {
+    backgroundColor: 'rgba(255, 82, 82, 0.3)',
+    borderColor: '#ff5252',
   },
 });
 

@@ -105,8 +105,8 @@ export const Friends = pgTable("Friends", {
     .notNull()
     .references(() => Register.id, { onDelete: "cascade" }),
   status: fStatus("status").default("REQUESTED"),
-  groupU: text("groupU").array().default("general"),
-  groupF: text("groupF").array().default("general"),
+  groupU: text("groupU").array().default(["general"]),
+  groupF: text("groupF").array().default(["general"]),
   isFavoriteU: boolean("isFavoriteU").default(false),
   isFavoriteF: boolean("isFavoriteF").default(false),
   isPrivateU: boolean("isPrivateU").default(false),
@@ -160,7 +160,7 @@ export const UserGameDetails = pgTable("UserGameDetails", {
   description: text("description"),
   category: varchar("category").default("none"),
   theme: varchar("theme").default("none"),
-  keyWords: text("keyWords").array().default("{}"),
+  keyWords: text("keyWords").array().default([]),
   isPublic: boolean("isPublic").default(true),
   createdAt: timestamp("createdAt").defaultNow(),
 });
@@ -339,6 +339,26 @@ export const GameWinners = pgTable("GameWinners", {
   firstPlacePoints: integer("firstPlacePoints").default(20), // 20/20 points for 1st place
   secondPlacePoints: integer("secondPlacePoints").default(15), // 15/20 points for 2nd place
   thirdPlacePoints: integer("thirdPlacePoints").default(10), // 10/20 points for 3rd place
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow(),
+});
+
+export const trophyRank = pgEnum("trophy_rank", [
+  "bronze",
+  "silver", 
+  "gold",
+  "platinum"
+]);
+
+export const UserTrophies = pgTable("UserTrophies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name").notNull(),
+  description: text("description"),
+  trophyRank: trophyRank("trophyRank").notNull().default("bronze"),
+  imageSrc: varchar("imageSrc").notNull(), // Image filename stored in /assets/users/
+  userId: uuid("userId")
+    .notNull()
+    .references(() => Register.id, { onDelete: "cascade" }),
   createdAt: timestamp("createdAt").defaultNow(),
   updatedAt: timestamp("updatedAt").defaultNow(),
 });

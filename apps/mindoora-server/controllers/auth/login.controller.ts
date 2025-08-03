@@ -46,7 +46,10 @@ export const loginController = async (req: Request<{},{},loginType>, res: Respon
     const user = await authQueries.findUserProfile(existingUser.id)
 
     const token = jwt.sign(
-      { email: existingUser.email },
+      { 
+        email: existingUser.email,
+        userId: existingUser.id 
+      },
       process.env.JWT_SECRETE,
       { expiresIn: '86400s' }
     )
