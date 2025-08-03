@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,12 @@ import {
   TextInput,
   Alert,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as ImagePicker from 'expo-image-picker';
 import authService from '../../services/auth/authService';
+import profileService from '../../services/profile/profileService';
 import TrophyCase from '../../components/TrophyCase'; // Import the new component
 
 interface UserProfileScreenProps {
@@ -22,6 +25,11 @@ interface UserProfileScreenProps {
 const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onProfileUpdate }) => {
   const user = authService.getCurrentUser();
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  
+  // Profile state
+  const [profileData, setProfileData] = useState(null);
   const [name, setName] = useState(user?.name || 'Demo User');
   const [email, setEmail] = useState(user?.email || 'demo@example.com');
   const [phone, setPhone] = useState('');
@@ -32,40 +40,154 @@ const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onProfile
   const [linkedIn, setLinkedIn] = useState('');
   const [github, setGithub] = useState('');
   const [instagram, setInstagram] = useState('');
+  const [avatar, setAvatar] = useState(user?.avatar || 'https://via.placeholder.com/100');
   
-  const handleSaveProfile = () => {
-    const updatedProfile = {
-      name,
-      email,
-      phone,
-      bio,
-      location,
-      website,
-      socialLinks: {
+  // Load profile data on component mount
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      setIsLoading(true);
+      const profile = await profileService.getProfile();
+      if (profile) {
+        setProfileData(profile);
+        setName(profile.name);
+        setEmail(profile.email);
+        setPhone(profile.phone);
+        setBio(profile.bio);
+        setLocation(profile.location);
+        setWebsite(profile.website);
+        setTwitter(profile.socialMedia.twitter);
+        setLinkedIn(profile.socialMedia.linkedin);
+        setInstagram(profile.socialMedia.instagram);
+        setAvatar(profile.avatar);
+      }
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      setIsLoading(true);
+      
+      const profileUpdateData = {
+        name,
+        bio,
+        location,
+        website,
         twitter,
-        linkedIn,
-        github,
         instagram,
-      },
-    };
+        linkedin: linkedIn
+      };
 
-    console.log('Updated profile:', updatedProfile);
+      // Validate profile data
+      const validation = profileService.validateProfileData(profileUpdateData);
+      if (!validation.isValid) {
+        Alert.alert('Validation Error', validation.errors.join('\n'));
+        return;
+      }
 
-    // Here you would update the profile to your backend
-    // For now, we simulate the update with a delay
-    setTimeout(() => {
-      Alert.alert('Success', 'Profile updated successfully!', [
-        { 
-          text: 'OK', 
-          onPress: () => {
-            setIsEditing(false);
-            if (onProfileUpdate) {
-              onProfileUpdate(updatedProfile);
+      const updatedProfile = await profileService.updateProfile(profileUpdateData);
+      
+      if (updatedProfile) {
+        Alert.alert('Success', 'Profile updated successfully!', [
+          { 
+            text: 'OK', 
+            onPress: () => {
+              setIsEditing(false);
+              if (onProfileUpdate) {
+                onProfileUpdate(updatedProfile);
+              }
             }
           }
-        }
-      ]);
-    }, 1000);
+        ]);
+      }
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+      Alert.alert('Error', 'Failed to update profile. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const requestPermissions = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant permission to access your photos.');
+      return false;
+    }
+    return true;
+  };
+
+  const pickImageFromGallery = async () => {
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        await uploadAvatar(imageUri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
+    }
+  };
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant permission to access your camera.');
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        await uploadAvatar(imageUri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  const uploadAvatar = async (imageUri: string) => {
+    try {
+      setIsUploadingAvatar(true);
+      
+      // For now, we'll use the local image URI directly
+      // In a real app, you would upload to a server/cloud storage first
+      const success = await profileService.updateAvatar(imageUri);
+      
+      if (success) {
+        setAvatar(imageUri);
+        Alert.alert('Success', 'Avatar updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      Alert.alert('Error', 'Failed to update avatar. Please try again.');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
   };
 
   const handleChangeAvatar = () => {
@@ -73,8 +195,8 @@ const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onProfile
       'Change Avatar',
       'Choose an option',
       [
-        { text: 'Camera', onPress: () => console.log('Open Camera') },
-        { text: 'Gallery', onPress: () => console.log('Open Gallery') },
+        { text: 'Camera', onPress: takePhoto },
+        { text: 'Gallery', onPress: pickImageFromGallery },
         { text: 'Cancel', style: 'cancel' }
       ]
     );
@@ -100,16 +222,23 @@ const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onProfile
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Avatar Section */}
         <View style={styles.avatarSection}>
-          <TouchableOpacity onPress={handleChangeAvatar} style={styles.avatarContainer}>
+          <TouchableOpacity onPress={handleChangeAvatar} style={styles.avatarContainer} disabled={isUploadingAvatar}>
             <Image 
-              source={{ uri: user?.avatar || 'https://via.placeholder.com/100' }}
+              source={{ uri: avatar }}
               style={styles.avatar}
             />
+            {isUploadingAvatar && (
+              <View style={styles.loadingOverlay}>
+                <ActivityIndicator size="large" color="#FF9800" />
+              </View>
+            )}
             <View style={styles.avatarOverlay}>
               <Text style={styles.avatarOverlayText}>📷</Text>
             </View>
           </TouchableOpacity>
-          <Text style={styles.avatarLabel}>Tap to change avatar</Text>
+          <Text style={styles.avatarLabel}>
+            {isUploadingAvatar ? 'Uploading...' : 'Tap to change avatar'}
+          </Text>
         </View>
 
         {/* Trophy Case */}
@@ -244,23 +373,34 @@ const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ onBack, onProfile
         <View style={styles.buttonSection}>
           {!isEditing ? (
             <TouchableOpacity 
-              style={styles.editButton} 
+              style={[styles.editButton, isLoading && styles.buttonDisabled]} 
               onPress={() => setIsEditing(true)}
+              disabled={isLoading}
             >
-              <Text style={styles.editButtonText}>✏️ Edit Profile</Text>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.editButtonText}>✏️ Edit Profile</Text>
+              )}
             </TouchableOpacity>
           ) : (
             <View style={styles.editingButtons}>
               <TouchableOpacity 
-                style={styles.saveButton} 
+                style={[styles.saveButton, isLoading && styles.buttonDisabled]} 
                 onPress={handleSaveProfile}
+                disabled={isLoading}
               >
-                <Text style={styles.saveButtonText}>💾 Save Changes</Text>
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.saveButtonText}>💾 Save Changes</Text>
+                )}
               </TouchableOpacity>
               
               <TouchableOpacity 
                 style={styles.cancelButton} 
                 onPress={() => setIsEditing(false)}
+                disabled={isLoading}
               >
                 <Text style={styles.cancelButtonText}>❌ Cancel</Text>
               </TouchableOpacity>
@@ -498,6 +638,20 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 30,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });
 

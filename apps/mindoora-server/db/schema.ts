@@ -42,6 +42,12 @@ export const User = pgTable("User", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name").notNull(),
   image: varchar("image"),
+  bio: text("bio"),
+  location: varchar("location"),
+  website: varchar("website"),
+  twitter: varchar("twitter"),
+  instagram: varchar("instagram"),
+  linkedin: varchar("linkedin"),
   registerId: uuid("registerId")
     .notNull()
     .unique()
