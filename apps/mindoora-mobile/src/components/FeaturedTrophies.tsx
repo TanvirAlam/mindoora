@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { View, Text, StyleSheet, Image, TouchableOpacity, Animated, FlatList } from 'react-native'
+import { View, Text, StyleSheet, Image, TouchableOpacity, Animated } from 'react-native'
 import TrophyModal from './TrophyModal'
 
 interface Trophy {
