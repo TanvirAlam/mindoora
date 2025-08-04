@@ -6,43 +6,100 @@ export interface SaveTrophyOptions {
   viewRef: React.RefObject<any>;
   userId: string;
   trophyName?: string;
+  trophyTitle?: string;
+  description?: string;
 }
 
 export const saveTrophyAsImage = async ({
   viewRef,
   userId,
   trophyName = 'trophy',
+  trophyTitle = 'My Trophy',
+  description = '',
 }: SaveTrophyOptions): Promise<string | null> => {
   try {
     if (!viewRef.current) {
       throw new Error('View reference is not available');
     }
 
-    // Capture the view as base64 image
-    const uri = await captureRef(viewRef.current, {
+    // Capture the view as tmpfile (better for copying to project)
+    const tempUri = await captureRef(viewRef.current, {
       format: 'png',
       quality: 1.0,
-      result: 'base64',
+      result: 'tmpfile',
     });
 
-    // Create the file path
-    const assetsDir = `${FileSystem.documentDirectory}assets/users/`;
-    const fileName = `trophy_${userId}.png`;
-    const filePath = `${assetsDir}${fileName}`;
+    const timestamp = Date.now();
+    const fileName = `${trophyName}_${userId}_${timestamp}.png`;
+    const metadataFileName = `${trophyName}_${userId}_${timestamp}.json`;
 
-    // Ensure the directory exists
-    const dirInfo = await FileSystem.getInfoAsync(assetsDir);
-    if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(assetsDir, { intermediates: true });
+    // Define the project assets directory path (relative to project root)
+    const projectAssetsDir = './assets/users/trophies/';
+    const projectImagePath = `${projectAssetsDir}${fileName}`;
+    const projectMetadataPath = `${projectAssetsDir}${metadataFileName}`;
+
+    // Create metadata object
+    const metadata = {
+      id: `trophy_${timestamp}`,
+      userId,
+      title: trophyTitle,
+      description,
+      imagePath: projectImagePath,
+      createdAt: new Date().toISOString(),
+      fileName,
+    };
+
+    // Copy the temporary file to our project assets directory
+    const finalImagePath = FileSystem.documentDirectory + `../../../assets/users/trophies/${fileName}`;
+    const finalMetadataPath = FileSystem.documentDirectory + `../../../assets/users/trophies/${metadataFileName}`;
+    
+    try {
+      // Create directory structure if it doesn't exist
+      const assetsDir = FileSystem.documentDirectory + '../../../assets/users/trophies/';
+      const dirInfo = await FileSystem.getInfoAsync(assetsDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(assetsDir, { intermediates: true });
+      }
+
+      // Copy the image file to project directory
+      await FileSystem.copyAsync({
+        from: tempUri,
+        to: finalImagePath,
+      });
+
+      // Save metadata to project directory
+      await FileSystem.writeAsStringAsync(finalMetadataPath, JSON.stringify(metadata, null, 2));
+
+      console.log(`✅ Trophy saved to project directory: ${finalImagePath}`);
+      console.log(`✅ Trophy metadata saved to project directory: ${finalMetadataPath}`);
+      console.log(`📁 Saved in: ./assets/users/trophies/`);
+      
+      return finalImagePath;
+    } catch (projectError) {
+      console.warn('Failed to save to project directory, falling back to app directory:', projectError);
+      
+      // Fallback: save to app documents directory
+      const fallbackDir = `${FileSystem.documentDirectory}assets/users/trophies/`;
+      const fallbackImagePath = `${fallbackDir}${fileName}`;
+      const fallbackMetadataPath = `${fallbackDir}${metadataFileName}`;
+      
+      const dirInfo = await FileSystem.getInfoAsync(fallbackDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(fallbackDir, { intermediates: true });
+      }
+      
+      await FileSystem.copyAsync({
+        from: tempUri,
+        to: fallbackImagePath,
+      });
+      
+      await FileSystem.writeAsStringAsync(fallbackMetadataPath, JSON.stringify(metadata, null, 2));
+      
+      console.log(`Trophy saved to app directory: ${fallbackImagePath}`);
+      console.log(`Trophy metadata saved to app directory: ${fallbackMetadataPath}`);
+      
+      return fallbackImagePath;
     }
-
-    // Convert base64 to file and save
-    await FileSystem.writeAsStringAsync(filePath, uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-
-    console.log(`Trophy saved successfully at: ${filePath}`);
-    return filePath;
   } catch (error) {
     console.error('Error saving trophy:', error);
     Alert.alert(

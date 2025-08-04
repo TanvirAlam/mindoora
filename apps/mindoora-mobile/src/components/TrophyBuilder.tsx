@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, SafeAreaView, ScrollView, Dimensions, Text, TouchableOpacity, Alert, Image } from 'react-native';
+import { View, StyleSheet, SafeAreaView, ScrollView, Dimensions, Text, TouchableOpacity, Alert, Image, TextInput, Modal } from 'react-native';
 import { saveTrophyAsImage } from '../utils/trophySave';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TrophyShape, TrophyDesign, TROPHY_MATERIALS } from '../types/trophy';
@@ -7,6 +7,8 @@ import DraggableShape from './DraggableShape';
 import MaterialSelector from './MaterialSelector';
 import ShapeSelector from './ShapeSelector';
 import Colors from '../constants/colors';
+import trophyService, { TrophyData } from '../services/trophyService';
+import { captureRef } from 'react-native-view-shot';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const CANVAS_WIDTH = screenWidth - 40;
@@ -42,6 +44,11 @@ const TrophyBuilder: React.FC = () => {
 
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>('shape-1');
   const [selectedMaterial, setSelectedMaterial] = useState<string>('gold');
+  const [showSaveModal, setShowSaveModal] = useState<boolean>(false);
+  const [trophyTitle, setTrophyTitle] = useState<string>('');
+  const [trophyDescription, setTrophyDescription] = useState<string>('');
+  const [selectedTrophyRank, setSelectedTrophyRank] = useState<'bronze' | 'silver' | 'gold' | 'platinum'>('gold');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const canvasRef = useRef(null);
   const userId = 'user_123'; // Example user ID
@@ -55,14 +62,71 @@ const TrophyBuilder: React.FC = () => {
     }));
   }, []);
 
+  const handleSavePress = useCallback(() => {
+    setShowSaveModal(true);
+  }, []);
+
   const handleSave = useCallback(async () => {
-    const result = await saveTrophyAsImage({
-      viewRef: canvasRef,
-      userId,
-    });
-    if (result) {
-      Alert.alert('Saved', `Trophy saved to: ${result}`);
+    if (!trophyTitle.trim()) {
+      Alert.alert('Error', 'Please enter a trophy name');
+      return;
     }
+
+    setIsSubmitting(true);
+    
+    try {
+      // Capture the trophy canvas as an image
+      const imageUri = await captureRef(canvasRef.current, {
+        format: 'png',
+        quality: 1.0,
+        result: 'tmpfile',
+      });
+
+      // Prepare trophy data
+      const trophyData: TrophyData = {
+        name: trophyTitle.trim(),
+        description: trophyDescription.trim(),
+        trophyRank: selectedTrophyRank,
+      };
+
+      // Prepare image file object
+      const imageFile = {
+        uri: imageUri,
+        type: 'image/png',
+        name: `${trophyTitle.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.png`,
+      };
+
+      // Save to trophy service (database)
+      await trophyService.createTrophy(trophyData, imageFile);
+      
+      // Also save locally
+      await saveTrophyAsImage({
+        viewRef: canvasRef,
+        userId,
+        trophyName: trophyTitle.toLowerCase().replace(/\s+/g, '_'),
+        trophyTitle: trophyTitle.trim(),
+        description: trophyDescription.trim(),
+      });
+      
+      // Reset form and close modal
+      setShowSaveModal(false);
+      setTrophyTitle('');
+      setTrophyDescription('');
+      setSelectedTrophyRank('gold');
+      
+      Alert.alert('Success!', 'Trophy created and saved successfully!');
+    } catch (error) {
+      console.error('Error saving trophy:', error);
+      Alert.alert('Error', 'Failed to save trophy. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [trophyTitle, trophyDescription, selectedTrophyRank]);
+
+  const handleCancelSave = useCallback(() => {
+    setShowSaveModal(false);
+    setTrophyTitle('');
+    setTrophyDescription('');
   }, []);
 
   const selectShape = useCallback((id: string) => {
@@ -211,7 +275,7 @@ const TrophyBuilder: React.FC = () => {
                 />
               ))}
           </View>
-          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+          <TouchableOpacity style={styles.saveButton} onPress={handleSavePress}>
             <Text style={styles.saveText}>SAVE</Text>
           </TouchableOpacity>
         </View>
@@ -238,6 +302,132 @@ const TrophyBuilder: React.FC = () => {
             <Text style={styles.instructionText}>• Change materials when a shape is selected</Text>
           </View>
         </ScrollView>
+
+        {/* Save Modal */}
+        <Modal
+          visible={showSaveModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleCancelSave}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              {/* Close Button */}
+              <TouchableOpacity 
+                style={styles.closeButton} 
+                onPress={handleCancelSave}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+              
+              <Text style={styles.modalTitle}>Add Trophy Details</Text>
+              
+              <View style={styles.formContainer}>
+                <TextInput
+                  style={styles.nameInput}
+                  value={trophyTitle}
+                  onChangeText={setTrophyTitle}
+                  placeholder="Trophy Name"
+                  placeholderTextColor="rgba(255, 255, 255, 0.7)"
+                  maxLength={50}
+                />
+                
+                <TextInput
+                  style={styles.descriptionInput}
+                  value={trophyDescription}
+                  onChangeText={setTrophyDescription}
+                  placeholder="Description"
+                  placeholderTextColor="rgba(255, 255, 255, 0.7)"
+                  multiline={true}
+                  numberOfLines={3}
+                  maxLength={200}
+                />
+                
+                {/* Trophy Rank Selection */}
+                <View style={styles.rankContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.rankButton,
+                      selectedTrophyRank === 'bronze' && styles.rankButtonSelected
+                    ]}
+                    onPress={() => setSelectedTrophyRank('bronze')}
+                  >
+                    <Text style={[
+                      styles.rankButtonText,
+                      selectedTrophyRank === 'bronze' && styles.rankButtonTextSelected
+                    ]}>BRONZE</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.rankButton,
+                      selectedTrophyRank === 'silver' && styles.rankButtonSelected
+                    ]}
+                    onPress={() => setSelectedTrophyRank('silver')}
+                  >
+                    <Text style={[
+                      styles.rankButtonText,
+                      selectedTrophyRank === 'silver' && styles.rankButtonTextSelected
+                    ]}>SILVER</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.rankButton,
+                      selectedTrophyRank === 'gold' && styles.rankButtonSelected
+                    ]}
+                    onPress={() => setSelectedTrophyRank('gold')}
+                  >
+                    <Text style={[
+                      styles.rankButtonText,
+                      selectedTrophyRank === 'gold' && styles.rankButtonTextSelected
+                    ]}>GOLD</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.rankButton,
+                      selectedTrophyRank === 'platinum' && styles.rankButtonSelected
+                    ]}
+                    onPress={() => setSelectedTrophyRank('platinum')}
+                  >
+                    <Text style={[
+                      styles.rankButtonText,
+                      selectedTrophyRank === 'platinum' && styles.rankButtonTextSelected
+                    ]}>PLATINUM</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <Text style={styles.subtitleText}>Master of all knowledge domains</Text>
+              </View>
+              
+              {/* Submit Button */}
+              <TouchableOpacity
+                style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+                onPress={handleSave}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.submitButtonText}>
+                  {isSubmitting ? 'Saving...' : 'Submit'}
+                </Text>
+              </TouchableOpacity>
+              
+              {/* Cancel Button */}
+              <TouchableOpacity
+                style={styles.cancelButtonNew}
+                onPress={handleCancelSave}
+              >
+                <Text style={styles.cancelButtonNewText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              {/* Bottom Action Buttons */}
+              <View style={styles.bottomActions}>
+                <Text style={styles.bottomActionText}>📁 Upload PNG</Text>
+                <Text style={styles.bottomActionText}>🏆 Create Trophy</Text>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -351,6 +541,152 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     letterSpacing: 1,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(40, 44, 72, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    backgroundColor: 'transparent',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    position: 'relative',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  closeButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: 'white',
+    textAlign: 'center',
+    marginBottom: 30,
+    marginTop: 20,
+  },
+  formContainer: {
+    marginBottom: 30,
+  },
+  nameInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: 'white',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  descriptionInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: 'white',
+    marginBottom: 20,
+    height: 80,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  rankContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 8,
+  },
+  rankButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+  },
+  rankButtonSelected: {
+    backgroundColor: '#F4D03F',
+    borderColor: '#F4D03F',
+  },
+  rankButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  rankButtonTextSelected: {
+    color: '#000',
+  },
+  subtitleText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  submitButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 25,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  submitButtonDisabled: {
+    backgroundColor: 'rgba(76, 175, 80, 0.5)',
+  },
+  submitButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  cancelButtonNew: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 25,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  cancelButtonNewText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  bottomActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 10,
+  },
+  bottomActionText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 
