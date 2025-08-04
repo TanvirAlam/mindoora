@@ -9,6 +9,7 @@ import {
   Alert,
   Dimensions,
   StatusBar,
+  ScrollView,
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import authService from '../../services/auth/authService';
@@ -16,6 +17,9 @@ import { Colors } from '../../constants/colors';
 import FireworksAnimation from '../../components/FireworksAnimation';
 import RainAnimation from '../../components/RainAnimation';
 import RadialProgressTimer from '../../components/RadialProgressTimer';
+import LeaderboardAnimation from '../../components/LeaderboardAnimation';
+import TrophyDisplay from '../../components/TrophyDisplay';
+import trophyEvaluator, { EarnedTrophy, GamePerformance } from '../../services/trophyEvaluator';
 
 const { width } = Dimensions.get('window');
 
@@ -54,6 +58,22 @@ const QUESTION_TIME_LIMIT = 30; // 30 seconds per question
 const POINTS_PER_CORRECT_ANSWER = 1;
 
 const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => {
+  // Add safety check for gameData
+  if (!gameData) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ExpoStatusBar style="light" />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorIcon}>❌</Text>
+          <Text style={styles.errorTitle}>Invalid Game Data</Text>
+          <Text style={styles.errorText}>Game data is missing. Please try again.</Text>
+          <TouchableOpacity style={styles.backButton} onPress={onBack}>
+            <Text style={styles.backButtonText}>← Back to Games</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
   const [questions, setQuestions] = useState<Question[]>([]);
   const [gameState, setGameState] = useState<GameState>({
     currentQuestionIndex: 0,
@@ -374,38 +394,73 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
 
   // Game Finished Screen
   if (gameState.gameFinished) {
+    const currentUser = authService.getCurrentUser();
+    const leaderboardEntries = [
+      {
+        id: currentUser?.id || '1',
+        name: currentUser?.name || 'You',
+        avatar: currentUser?.avatar || 'https://via.placeholder.com/50',
+        score: gameState.score,
+        correctAnswers: gameState.correctAnswers,
+        totalQuestions: gameState.totalQuestions,
+      },
+    ];
+
+    // Evaluate performance for trophies
+    const performance: GamePerformance = {
+      score: gameState.score,
+      correctAnswers: gameState.correctAnswers,
+      totalQuestions: gameState.totalQuestions,
+      accuracy: getScorePercentage()
+    };
+
+    const earnedTrophies = trophyEvaluator.evaluatePerformance(performance);
+
     return (
       <SafeAreaView style={styles.container}>
         <ExpoStatusBar style="light" />
-        <View style={styles.finishedContainer}>
-          <Text style={styles.finishedIcon}>🎯</Text>
-          <Text style={styles.finishedTitle}>Game Complete!</Text>
-          <Text style={styles.performanceMessage}>{getPerformanceMessage()}</Text>
-          
-          <View style={styles.scoreCard}>
-            <View style={styles.scoreRow}>
-              <Text style={styles.scoreLabel}>Final Score:</Text>
-              <Text style={styles.finalScore}>{gameState.score} points</Text>
-            </View>
-            <View style={styles.scoreRow}>
-              <Text style={styles.scoreLabel}>Correct Answers:</Text>
-              <Text style={styles.scoreValue}>{gameState.correctAnswers}/{gameState.totalQuestions}</Text>
-            </View>
-            <View style={styles.scoreRow}>
-              <Text style={styles.scoreLabel}>Accuracy:</Text>
-              <Text style={styles.scoreValue}>{getScorePercentage()}%</Text>
-            </View>
-          </View>
+        <ScrollView 
+          style={styles.finishedScrollView}
+          contentContainerStyle={styles.finishedScrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces={true}
+        >
+          <View style={styles.finishedContainer}>
+            <Text style={styles.finishedIcon}>🎯</Text>
+            <Text style={styles.finishedTitle}>Game Complete!</Text>
+            <Text style={styles.performanceMessage}>{getPerformanceMessage()}</Text>
+            
+            {/* Leaderboard Animation */}
+            <LeaderboardAnimation entries={leaderboardEntries} />
 
-          <View style={styles.finishedActions}>
-            <TouchableOpacity style={styles.restartButton} onPress={restartGame}>
-              <Text style={styles.restartButtonText}>🔄 Play Again</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.backButton} onPress={onBack}>
-              <Text style={styles.backButtonText}>← Back to Games</Text>
-            </TouchableOpacity>
+            {/* Trophy Display */}
+            <TrophyDisplay trophies={earnedTrophies} />
+            
+            <View style={styles.scoreCard}>
+              <View style={styles.scoreRow}>
+                <Text style={styles.scoreLabel}>Final Score:</Text>
+                <Text style={styles.finalScore}>{gameState.score} points</Text>
+              </View>
+              <View style={styles.scoreRow}>
+                <Text style={styles.scoreLabel}>Correct Answers:</Text>
+                <Text style={styles.scoreValue}>{gameState.correctAnswers}/{gameState.totalQuestions}</Text>
+              </View>
+              <View style={styles.scoreRow}>
+                <Text style={styles.scoreLabel}>Accuracy:</Text>
+                <Text style={styles.scoreValue}>{getScorePercentage()}%</Text>
+              </View>
+            </View>
+
+            <View style={styles.finishedActions}>
+              <TouchableOpacity style={styles.restartButton} onPress={restartGame}>
+                <Text style={styles.restartButtonText}>🔄 Play Again</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.backButton} onPress={onBack}>
+                <Text style={styles.backButtonText}>← Back to Games</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -946,11 +1001,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
+  finishedScrollView: {
+    flex: 1,
+  },
+  finishedScrollContent: {
+    flexGrow: 1,
+    paddingVertical: 20,
+  },
   finishedContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
+    minHeight: Dimensions.get('window').height - 100, // Ensure minimum height for scrolling
   },
   finishedIcon: {
     fontSize: 64,

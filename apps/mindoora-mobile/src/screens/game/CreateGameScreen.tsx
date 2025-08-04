@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -53,6 +53,10 @@ const CreateGameScreen: React.FC<CreateGameScreenProps> = ({ onBack, onGameCreat
   const [showMyGames, setShowMyGames] = useState(false);
   const [isCreatingGame, setIsCreatingGame] = useState(false);
   const [editingGameData, setEditingGameData] = useState<GameData | null>(editingGame || null);
+  const [allQuestions, setAllQuestions] = useState<QuestionSet[]>([]);
+  const [currentBatch, setCurrentBatch] = useState(1);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const promptInputRef = useRef<TextInput>(null);
 
   // Handle navigation from MyGamesScreen EDIT button
   const handleNavigateToAddQuestions = (gameData: GameData) => {
@@ -77,7 +81,7 @@ const handleGenerateQuestions = async () => {
     setIsGenerating(true);
     
     try {
-      console.log('Generating questions for prompt:', prompt);
+      console.log('Generating questions for prompt:', prompt, 'Batch:', currentBatch);
       
       // Call AI service to generate questions
       const result = await aiService.generateQuestions(prompt, {
@@ -103,15 +107,35 @@ const handleGenerateQuestions = async () => {
         };
       });
       
+      // Add to accumulated questions
+      const updatedAllQuestions = [...allQuestions, ...convertedQuestions];
+      setAllQuestions(updatedAllQuestions);
+      
+      // Set current generated questions for display
       setGeneratedQuestions(convertedQuestions);
       setSelectedQuestions(convertedQuestions.map((_, index) => index)); // Select all questions by default
-      setGameTitle(`Quiz: ${prompt}`);
       
-      Alert.alert(
-        'Success!', 
-        `Generated ${convertedQuestions.length} questions successfully! Tap on questions to select/deselect them.`,
-        [{ text: 'OK' }]
-      );
+      // Set title only on first batch
+      if (currentBatch === 1) {
+        setGameTitle(`Quiz: ${prompt}`);
+      }
+      
+      // Increment batch counter
+      setCurrentBatch(prev => prev + 1);
+      
+      const totalQuestions = updatedAllQuestions.length;
+      
+      if (totalQuestions >= 20) {
+        // Reached 20 questions - automatically create game and navigate to My Games
+        setTimeout(async () => {
+          await handleAutoCreateGameAt20(updatedAllQuestions);
+        }, 1000); // Give user time to see the progress
+      } else {
+        // Scroll down to Create Game button after generating questions
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 500); // Small delay to ensure UI has updated
+      }
       
     } catch (error) {
       console.error('Error generating questions:', error);
@@ -171,43 +195,88 @@ const handleGenerateQuestions = async () => {
       return;
     }
 
-    if (selectedQuestions.length === 0) {
-      Alert.alert('No Questions Selected', 'Please select at least one question for your game.');
+    if (allQuestions.length === 0) {
+      Alert.alert('No Questions Available', 'Please generate some questions first.');
       return;
     }
 
-    if (selectedQuestions.length > 20) {
-      Alert.alert('Limit Exceeded', 'Each game can have a maximum of 20 questions. Please reduce the selection.');
+    // Warn if less than 20 questions but allow creation
+    if (allQuestions.length < 20) {
+      // Less than 20 questions - prompt for more
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+        setTimeout(() => {
+          promptInputRef.current?.focus();
+        }, 300); // Small delay to ensure scroll completes first
+      }, 500); // Small delay to ensure UI has updated
       return;
     }
 
+    // If 20 or more questions, proceed directly
+    proceedWithGameCreation();
+  };
+
+
+  const proceedWithGameCreation = async () => {
     setIsCreatingGame(true);
+    
     try {
-      const selectedQuestionsList = selectedQuestions.map(index => generatedQuestions[index]);
+      // Use all accumulated questions (up to 20) instead of just selected from current batch
+      const finalQuestions = allQuestions.slice(0, 20);
       
       if (editingGameData) {
         // We're editing an existing game - add questions to it
         console.log('Adding questions to existing game:', editingGameData.id);
-        await addQuestionsToExistingGame(editingGameData.id, selectedQuestionsList);
+        await addQuestionsToExistingGame(editingGameData.id, finalQuestions);
         
-        Alert.alert('Success', `Added ${selectedQuestionsList.length} questions to "${editingGameData.title}" successfully!`, [
+        Alert.alert('Success', `Added ${finalQuestions.length} questions to "${editingGameData.title}" successfully!`, [
           { text: 'OK', onPress: onBack }
         ]);
       } else {
-        // We're creating a new game
+        // We're creating a new game with all accumulated questions
         const gameData = {
           title: gameTitle,
           prompt: prompt,
-          questions: selectedQuestionsList,
+          questions: finalQuestions,
           createdAt: new Date().toISOString(),
         };
 
-        console.log('Creating new game with backend:', gameData);
+        console.log('Creating new game with 20 accumulated questions:', gameData);
         await saveGameWithQuestions(gameData);
 
-        Alert.alert('Success', 'Game created successfully!', [
-          { text: 'OK', onPress: onBack }
-        ]);
+        Alert.alert(
+          '🎉 Game Created Successfully!', 
+          `Your game "${gameData.title}" has been created with ${finalQuestions.length} questions and is ready to play!`,
+          [
+            { 
+              text: 'Go to My Games', 
+              onPress: () => {
+                // Reset all states
+                setPrompt('');
+                setGeneratedQuestions([]);
+                setSelectedQuestions([]);
+                setGameTitle('');
+                setAllQuestions([]);
+                setCurrentBatch(1);
+                
+                // Navigate to My Games
+                setShowMyGames(true);
+              }
+            },
+            { 
+              text: 'Stay Here', 
+              onPress: () => {
+                // Reset states but stay on creation screen
+                setPrompt('');
+                setGeneratedQuestions([]);
+                setSelectedQuestions([]);
+                setGameTitle('');
+                setAllQuestions([]);
+                setCurrentBatch(1);
+              }
+            }
+          ]
+        );
       }
     } catch (error) {
       console.error('Error with game operation:', error);
@@ -358,6 +427,118 @@ const handleGenerateQuestions = async () => {
     return { success: true, questionsAdded: questions.length };
   };
 
+  const handleAutoCreateGameAt20 = async (questionsToUse?: QuestionSet[]) => {
+    if (!gameTitle.trim()) {
+      // Set a default title if none exists
+      setGameTitle(`Quiz: ${prompt}`);
+    }
+    
+    setIsCreatingGame(true);
+
+    try {
+      // Use exactly 20 questions - either passed in or from state
+      const finalQuestions = (questionsToUse || allQuestions).slice(0, 20);
+      
+      const gameData = {
+        title: gameTitle || `Quiz: ${prompt}`,
+        prompt: prompt,
+        questions: finalQuestions,
+        createdAt: new Date().toISOString(),
+      };
+
+      console.log('Auto-creating game at 20 questions:', gameData);
+      await saveGameWithQuestions(gameData);
+
+      Alert.alert(
+        '🎉 Game Auto-Created!', 
+        `Congratulations! You've reached 20 questions and your game "${gameData.title}" has been automatically created!\n\nNavigating to My Games...`,
+        [
+          { 
+            text: 'View My Games', 
+            onPress: () => {
+              // Reset all states
+              setPrompt('');
+              setGeneratedQuestions([]);
+              setSelectedQuestions([]);
+              setGameTitle('');
+              setAllQuestions([]);
+              setCurrentBatch(1);
+              
+              // Navigate to My Games
+              setShowMyGames(true);
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error auto-creating game at 20:', error);
+      
+      Alert.alert(
+        'Auto-Creation Failed',
+        'There was an error automatically creating your game. You can still create it manually from the Create Game button.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsCreatingGame(false);
+    }
+  };
+
+  const handleAutoCreateGame = async (finalQuestions: QuestionSet[]) => {
+    setIsCreatingGame(true);
+    
+    try {
+      const gameData = {
+        title: gameTitle || `Quiz: ${prompt}`,
+        prompt: prompt,
+        questions: finalQuestions,
+        createdAt: new Date().toISOString(),
+      };
+
+      console.log('Auto-creating game with 20 questions:', gameData);
+      await saveGameWithQuestions(gameData);
+
+      Alert.alert(
+        '🎉 Game Created Successfully!', 
+        `Your game "${gameData.title}" has been created with 20 questions and is ready to play!`,
+        [
+          { 
+            text: 'Go to My Games', 
+            onPress: () => {
+              // Reset all states
+              setPrompt('');
+              setGeneratedQuestions([]);
+              setSelectedQuestions([]);
+              setGameTitle('');
+              setAllQuestions([]);
+              setCurrentBatch(1);
+              
+              // Navigate to My Games
+              setShowMyGames(true);
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error auto-creating game:', error);
+      
+      Alert.alert(
+        'Game Creation Failed',
+        'There was an error creating your game. Would you like to try again or go to My Games to create it manually?',
+        [
+          { text: 'Try Again', onPress: () => handleAutoCreateGame(finalQuestions) },
+          { 
+            text: 'Go to My Games', 
+            onPress: () => {
+              setShowMyGames(true);
+            }
+          }
+        ]
+      );
+    } finally {
+      setIsCreatingGame(false);
+    }
+  };
+
   const handleClearAll = () => {
     Alert.alert(
       'Clear All',
@@ -372,6 +553,8 @@ const handleGenerateQuestions = async () => {
             setGeneratedQuestions([]);
             setSelectedQuestions([]);
             setGameTitle('');
+            setAllQuestions([]);
+            setCurrentBatch(1);
           }
         }
       ]
@@ -409,7 +592,11 @@ const handleGenerateQuestions = async () => {
         <View style={styles.headerRight} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        ref={scrollViewRef}
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+      >
         {/* Title Section */}
         <View style={styles.titleSection}>
           <Text style={styles.gameIcon}>
@@ -446,6 +633,7 @@ const handleGenerateQuestions = async () => {
           <Text style={styles.inputLabel}>Enter Topic or Prompt</Text>
           
           <TextInput
+            ref={promptInputRef}
             style={styles.promptInput}
             value={prompt}
             onChangeText={setPrompt}
@@ -510,10 +698,10 @@ const handleGenerateQuestions = async () => {
             {/* Question Selection Instructions */}
             <View style={styles.selectionInstructions}>
               <Text style={styles.instructionText}>
-                📋 Tap on questions to select/deselect them for your game
+                📋 Latest batch: {generatedQuestions.length} questions (Batch {currentBatch - 1})
               </Text>
               <Text style={styles.selectionCount}>
-                Selected: {selectedQuestions.length} / {generatedQuestions.length} questions (Max: 20)
+                Total accumulated: {allQuestions.length} questions | Target: 20 questions
               </Text>
               
               {/* Progress Bar */}
@@ -523,26 +711,38 @@ const handleGenerateQuestions = async () => {
                     style={[
                       styles.progressFill, 
                       { 
-                        width: `${Math.min((selectedQuestions.length / 20) * 100, 100)}%`,
-                        backgroundColor: selectedQuestions.length === 20 ? '#4CAF50' : '#2196F3'
+                        width: `${Math.min((allQuestions.length / 20) * 100, 100)}%`,
+                        backgroundColor: allQuestions.length >= 20 ? '#4CAF50' : '#2196F3'
                       }
                     ]} 
                   />
                 </View>
                 <Text style={styles.progressText}>
-                  {selectedQuestions.length}/20 questions
+                  {allQuestions.length}/20 questions
                 </Text>
               </View>
               
-              {selectedQuestions.length === 20 && (
+              {allQuestions.length >= 20 && (
                 <Text style={styles.readyMessage}>
-                  🎉 Perfect! Your game is ready to play with 20 questions!
+                  🎉 Perfect! You've reached 20 questions - the ideal game size!
                 </Text>
               )}
               
-              {selectedQuestions.length > 15 && selectedQuestions.length < 20 && (
+              {allQuestions.length >= 15 && allQuestions.length < 20 && (
                 <Text style={styles.almostReadyMessage}>
-                  ⚡ Almost there! Add {20 - selectedQuestions.length} more questions to make your game complete.
+                  ⚡ Almost there! Generate {20 - allQuestions.length} more for the ideal 20-question game.
+                </Text>
+              )}
+              
+              {allQuestions.length >= 5 && allQuestions.length < 15 && (
+                <Text style={styles.continueMessage}>
+                  🚀 Good start! You can create a game now or continue to 20 questions for the best experience.
+                </Text>
+              )}
+              
+              {allQuestions.length > 0 && allQuestions.length < 5 && (
+                <Text style={styles.continueMessage}>
+                  📝 You can create a game with any number of questions.
                 </Text>
               )}
             </View>
@@ -618,17 +818,29 @@ const handleGenerateQuestions = async () => {
               <TouchableOpacity
                 style={[
                   styles.createGameButton,
-                  selectedQuestions.length === 0 && styles.createGameButtonDisabled
+                  (allQuestions.length === 0 || isCreatingGame || isGenerating) && styles.createGameButtonDisabled
                 ]}
                 onPress={handleCreateGame}
-                disabled={selectedQuestions.length === 0}
+                disabled={allQuestions.length === 0 || isCreatingGame || isGenerating}
               >
-                <Text style={[
-                  styles.createGameButtonText,
-                  selectedQuestions.length === 0 && styles.createGameButtonTextDisabled
-                ]}>
-                  Create Game ({selectedQuestions.length} questions)
-                </Text>
+                {(isCreatingGame || isGenerating) ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={styles.createGameButtonText}>
+                      {isCreatingGame ? 'Creating Game...' : 'Generating Questions...'}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={[
+                    styles.createGameButtonText,
+                    allQuestions.length === 0 && styles.createGameButtonTextDisabled
+                  ]}>
+                    {allQuestions.length > 0 
+                      ? `Create Game (${allQuestions.length} questions)`
+                      : `Generate questions first`
+                    }
+                  </Text>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -647,10 +859,10 @@ const handleGenerateQuestions = async () => {
             <Text style={styles.infoTitle}>How it Works</Text>
             <Text style={styles.infoText}>
               1. Enter a topic or detailed prompt{'\n'}
-              2. Tap "Generate 5 Questions" to create quiz{'\n'}
-              3. Review the generated questions{'\n'}
+              2. Tap "Generate 5 Questions" multiple times{'\n'}
+              3. Continue until you reach 20 questions{'\n'}
               4. Give your game a title{'\n'}
-              5. Tap "Create Game" to save
+              5. Tap "Create Game" when you have 20 questions
             </Text>
           </View>
         </View>
@@ -1120,6 +1332,19 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#FF9800',
+  },
+  
+  continueMessage: {
+    fontSize: 14,
+    color: '#2196F3',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginTop: 8,
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#2196F3',
   },
   
   // My Games Button styles
