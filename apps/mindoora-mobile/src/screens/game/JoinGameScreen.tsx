@@ -11,10 +11,18 @@ import {
   Keyboard,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import gameService from '../../services/gameService';
+import authService from '../../services/auth/authService';
 
 interface JoinGameScreenProps {
   onBack: () => void;
-  onJoinGame?: (gameCode: string) => void;
+  onJoinGame?: (gameData: {
+    gameCode: string;
+    roomId: string;
+    playerId: string;
+    gameId: string;
+    playerName: string;
+  }) => void;
 }
 
 const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) => {
@@ -50,23 +58,65 @@ const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) =
       return;
     }
 
+    // Get current user info for the player name
+    const currentUser = authService.getCurrentUser();
+    const playerName = currentUser?.name || 'Anonymous Player';
+
     setIsLoading(true);
     
     try {
-      console.log('Joining game with code:', code);
+      console.log('🎮 Joining game with code:', code);
       
-      // Here you would integrate with your game service
-      // For now, we'll simulate the join process
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const response = await gameService.joinGame({
+        inviteCode: code,
+        name: playerName
+      });
       
-      if (onJoinGame) {
-        onJoinGame(code);
+      if (response.success && response.data) {
+        console.log('🎮 Successfully joined game:', response.data);
+        
+        const gameData = {
+          gameCode: code,
+          roomId: response.data.player.roomId,
+          playerId: response.data.player.id,
+          gameId: response.data.gameId,
+          playerName: response.data.player.name
+        };
+        
+        if (onJoinGame) {
+          onJoinGame(gameData);
+        } else {
+          Alert.alert(
+            'Success! 🎉', 
+            `You've joined the game as ${response.data.player.name}!\n\n${response.data.player.isApproved ? 'You can start playing now.' : 'Waiting for host approval...'}`,
+            [
+              { 
+                text: 'OK', 
+                onPress: () => {
+                  // You could navigate to game lobby here
+                  console.log('Navigate to game lobby with:', gameData);
+                }
+              }
+            ]
+          );
+        }
       } else {
-        Alert.alert('Success', `Joining game with code: ${code}`);
+        Alert.alert('Error', response.message || 'Failed to join game.');
       }
     } catch (error) {
-      console.error('Error joining game:', error);
-      Alert.alert('Error', 'Failed to join game. Please check your code and try again.');
+      console.error('🎮 Error joining game:', error);
+      
+      let errorMessage = 'Failed to join game. Please try again.';
+      
+      if (error.message.includes('not found')) {
+        errorMessage = 'Game room not found. Please check your code and try again.';
+      } else if (error.message.includes('full')) {
+        errorMessage = 'This game room is full. Please try another game.';
+      } else if (error.message.includes('connect')) {
+        errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+      }
+      
+      Alert.alert('Unable to Join Game', errorMessage);
     } finally {
       setIsLoading(false);
     }
