@@ -12,12 +12,14 @@ import {
   Modal,
   FlatList,
   Animated,
+  TextInput,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import authService from '../../services/auth/authService';
 import { Colors } from '../../constants/colors';
 import Spinner from '../../components/ui/Spinner';
 import WinnersSection from '../../components/WinnersSection';
+import invitationService from '../../services/invitationService';
 import GameRoomScreen from './GameRoomScreen';
 
 interface MyGamesScreenProps {
@@ -62,6 +64,12 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
   const [gameQuestions, setGameQuestions] = useState<Question[]>([]);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   
+// Invitation modal state
+  const [isInvitationModalVisible, setIsInvitationModalVisible] = useState(false);
+  const [invitationEmail, setInvitationEmail] = useState('');
+  const [invitationStatus, setInvitationStatus] = useState<'pending' | 'accepted' | 'rejected' | 'none'>('none');
+  const [currentGameId, setCurrentGameId] = useState<string | null>(null);
+
   // Game room state
   const [isGameRoomVisible, setIsGameRoomVisible] = useState(false);
   const [gameToPlay, setGameToPlay] = useState<GameData | null>(null);
@@ -176,11 +184,8 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
       [
         { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'Send Invite', 
-          onPress: () => {
-            // TODO: Implement invite functionality
-            Alert.alert('Coming Soon', 'Invite functionality will be available in a future update.');
-          }
+text: 'Send Code', 
+onPress: () => handleSendCode(game),
         }
       ]
     );
@@ -269,6 +274,41 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
     setSelectedGame(game);
     setIsQuestionsModalVisible(true);
     await fetchGameQuestions(game.id);
+  };
+
+const generateGameCode = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  };
+
+  const [gameCode, setGameCode] = useState('');
+
+const handleSendCode = (game: GameData) => {
+    const code = generateGameCode();
+    setCurrentGameId(game.id);
+    setGameCode(code);
+    setIsInvitationModalVisible(true);
+};
+
+const handleSendInvitation = async () => {
+    if (!currentGameId || !invitationEmail || !gameCode) return;
+
+    try {
+      const response = await invitationService.sendInvitation({
+        gameId: currentGameId,
+        recipientEmail: invitationEmail,
+        gameCode: gameCode,
+      });
+
+      if (response.success) {
+        setInvitationStatus('pending');
+        Alert.alert('Success', 'Invitation sent successfully!');
+      } else {
+        Alert.alert('Error', response.message || 'Failed to send invitation.');
+      }
+    } catch (error) {
+      console.error('Error sending invitation:', error);
+      Alert.alert('Error', 'Unable to send the invitation. Please try again later.');
+    }
   };
 
   const confirmDeleteGame = async (game: GameData) => {
@@ -755,6 +795,83 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
         )}
       </ScrollView>
       
+{/* Invitation Modal */}
+      <Modal
+        visible={isInvitationModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setIsInvitationModalVisible(false);
+          setCurrentGameId(null);
+          setInvitationEmail('');
+          setInvitationStatus('none');
+        }}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          {/* Modal Header */}
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.modalBackButton} 
+              onPress={() => {
+                setIsInvitationModalVisible(false);
+                setCurrentGameId(null);
+                setInvitationEmail('');
+                setInvitationStatus('none');
+              }}
+            >
+              <Text style={styles.modalBackButtonText}>← Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Invite Player</Text>
+            <View style={styles.modalHeaderRight} />
+          </View>
+
+          {/* Modal Content */}
+          <View style={styles.modalContent}>
+            {/* Game Code Section */}
+            <View style={styles.codeSection}>
+              <Text style={styles.codeSectionTitle}>🎮 Game Code</Text>
+              <View style={styles.codeContainer}>
+                <Text style={styles.gameCodeText}>{gameCode}</Text>
+              </View>
+              <Text style={styles.codeInstructions}>
+                Share this 6-digit code with players so they can join your game instantly!
+              </Text>
+            </View>
+
+            {/* Divider */}
+            <View style={styles.divider} />
+
+            {/* Email Invitation Section */}
+            <View style={styles.emailSection}>
+              <Text style={styles.emailSectionTitle}>📧 Send Email Invitation</Text>
+              <Text style={styles.emailInstructions}>
+                Send a personalized email invitation with the game code:
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={invitationEmail}
+                onChangeText={setInvitationEmail}
+                placeholder="Player's Email Address"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+
+              {invitationStatus === 'pending' && (
+                <Text style={styles.statusText}>✅ Email invitation sent successfully!</Text>
+              )}
+
+              <TouchableOpacity
+                style={[styles.sendButton, !invitationEmail && styles.disabledButton]}
+                disabled={!invitationEmail}
+                onPress={handleSendInvitation}
+              >
+                <Text style={styles.sendButtonText}>Send Email Invitation</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
       {/* Questions Modal */}
       <Modal
         visible={isQuestionsModalVisible}
@@ -1634,6 +1751,97 @@ const styles = StyleSheet.create({
   },
   favoriteButton: {
     backgroundColor: '#FFC107', // Amber
+  },
+  
+  // Invitation Modal Styles
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: '#fff',
+    marginVertical: 15,
+  },
+  sendButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  sendButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  statusText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    textAlign: 'center',
+    marginTop: 10,
+    fontStyle: 'italic',
+  },
+  
+  // Game Code Section Styles
+  codeSection: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 20,
+    marginVertical: 10,
+    alignItems: 'center',
+  },
+  codeSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+  },
+  codeContainer: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    marginBottom: 15,
+  },
+  gameCodeText: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    letterSpacing: 4,
+    textAlign: 'center',
+  },
+  codeInstructions: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  
+  // Email Section Styles
+  emailSection: {
+    marginTop: 10,
+  },
+  emailSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+  },
+  emailInstructions: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+    lineHeight: 20,
+  },
+  
+  // Divider Style
+  divider: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+    marginVertical: 20,
   },
   
 });

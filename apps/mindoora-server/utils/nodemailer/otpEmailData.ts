@@ -1,6 +1,6 @@
 export const otpEmailData = (recieverEmail: string, otp: number) => {
   const mailData = {
-    from: 'abdullahalnuman66@gmail.com',
+    from: process.env.NEXT_PUBLIC_EMAIL || 'mindooragroup@gmail.com',
     to: recieverEmail,
     subject: 'Forget Password OTP',
 
