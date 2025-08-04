@@ -1,5 +1,6 @@
-import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, SafeAreaView, ScrollView, Dimensions, Text, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import { View, StyleSheet, SafeAreaView, ScrollView, Dimensions, Text, TouchableOpacity, Alert, Image } from 'react-native';
+import { saveTrophyAsImage } from '../utils/trophySave';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TrophyShape, TrophyDesign, TROPHY_MATERIALS } from '../types/trophy';
 import DraggableShape from './DraggableShape';
@@ -9,7 +10,7 @@ import Colors from '../constants/colors';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const CANVAS_WIDTH = screenWidth - 40;
-const CANVAS_HEIGHT = screenHeight * 0.5;
+const CANVAS_HEIGHT = screenHeight * 0.35;
 
 const TrophyBuilder: React.FC = () => {
   const [trophyDesign, setTrophyDesign] = useState<TrophyDesign>({
@@ -42,6 +43,9 @@ const TrophyBuilder: React.FC = () => {
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>('shape-1');
   const [selectedMaterial, setSelectedMaterial] = useState<string>('gold');
 
+  const canvasRef = useRef(null);
+  const userId = 'user_123'; // Example user ID
+
   const updateShape = useCallback((id: string, updates: Partial<TrophyShape>) => {
     setTrophyDesign(prev => ({
       ...prev,
@@ -49,6 +53,16 @@ const TrophyBuilder: React.FC = () => {
         shape.id === id ? { ...shape, ...updates } : shape
       ),
     }));
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    const result = await saveTrophyAsImage({
+      viewRef: canvasRef,
+      userId,
+    });
+    if (result) {
+      Alert.alert('Saved', `Trophy saved to: ${result}`);
+    }
   }, []);
 
   const selectShape = useCallback((id: string) => {
@@ -154,29 +168,35 @@ const TrophyBuilder: React.FC = () => {
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>3D Trophy Builder</Text>
-          <View style={styles.actionButtons}>
-            {selectedShapeId && (
-              <>
-                <TouchableOpacity style={styles.actionButton} onPress={duplicateSelectedShape}>
-                  <Text style={styles.actionButtonText}>Duplicate</Text>
-                </TouchableOpacity>
-                {trophyDesign.shapes.length > 1 && (
-                  <TouchableOpacity 
-                    style={[styles.actionButton, styles.deleteButton]} 
-                    onPress={deleteSelectedShape}
-                  >
-                    <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Delete</Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
+          <View style={styles.headerContent}>
+            <View style={styles.trophyContainer}>
+              <Image 
+                source={require('../../assets/trophies/champion.png')} 
+                style={styles.headerTrophy}
+                resizeMode="contain"
+              />
+            </View>
+            <View style={styles.logoContainer}>
+              <Image 
+                source={require('../../assets/mindoora.png')} 
+                style={styles.logo}
+                resizeMode="contain"
+              />
+              <Text style={styles.subtitle}>Trophy Builder</Text>
+            </View>
+            <View style={styles.trophyContainer}>
+              <Image 
+                source={require('../../assets/trophies/hall-of-fame.png')} 
+                style={styles.headerTrophy}
+                resizeMode="contain"
+              />
+            </View>
           </View>
         </View>
 
         {/* Canvas */}
         <View style={styles.canvasContainer}>
-          <View style={[styles.canvas, { width: CANVAS_WIDTH, height: CANVAS_HEIGHT }]}>
+          <View ref={canvasRef} style={[styles.canvas, { width: CANVAS_WIDTH, height: CANVAS_HEIGHT }]}>
             {trophyDesign.shapes
               .sort((a, b) => a.zIndex - b.zIndex)
               .map((shape) => (
@@ -191,6 +211,9 @@ const TrophyBuilder: React.FC = () => {
                 />
               ))}
           </View>
+          <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+            <Text style={styles.saveText}>SAVE</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Controls */}
@@ -229,8 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background.primary,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
@@ -238,31 +260,36 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray[200],
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.text.primary,
-  },
-  actionButtons: {
+  headerContent: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    maxWidth: 280,
   },
-  actionButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
+  logoContainer: {
+    alignItems: 'center',
+    flex: 1,
   },
-  deleteButton: {
-    backgroundColor: Colors.error,
+  trophyContainer: {
+    width: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  actionButtonText: {
-    color: Colors.white,
+  headerTrophy: {
+    width: 60,
+    height: 72,
+  },
+  logo: {
+    width: 125,
+    height: 45,
+  },
+  subtitle: {
     fontSize: 14,
-    fontWeight: '600',
-  },
-  deleteButtonText: {
-    color: Colors.white,
+    fontWeight: '500',
+    color: Colors.text.secondary,
+    marginTop: 4,
+    textAlign: 'center',
   },
   canvasContainer: {
     alignItems: 'center',
@@ -306,6 +333,24 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     marginBottom: 4,
     lineHeight: 20,
+  },
+  saveButton: {
+    backgroundColor: Colors.success,
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginTop: 15,
+    shadowColor: Colors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  saveText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
 });
 
