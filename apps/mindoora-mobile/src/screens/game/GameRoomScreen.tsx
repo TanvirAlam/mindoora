@@ -16,6 +16,7 @@ import { Colors } from '../../constants/colors';
 import FireworksAnimation from '../../components/FireworksAnimation';
 import RainAnimation from '../../components/RainAnimation';
 import RadialProgressTimer from '../../components/RadialProgressTimer';
+import LeaderboardAnimation from '../../components/LeaderboardAnimation';
 
 const { width } = Dimensions.get('window');
 
@@ -374,6 +375,18 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
 
   // Game Finished Screen
   if (gameState.gameFinished) {
+    const currentUser = authService.getCurrentUser();
+    const leaderboardEntries = [
+      {
+        id: currentUser?.id || '1',
+        name: currentUser?.name || 'You',
+        avatar: currentUser?.avatar || 'https://via.placeholder.com/50',
+        score: gameState.score,
+        correctAnswers: gameState.correctAnswers,
+        totalQuestions: gameState.totalQuestions,
+      },
+    ];
+
     return (
       <SafeAreaView style={styles.container}>
         <ExpoStatusBar style="light" />
@@ -381,6 +394,9 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
           <Text style={styles.finishedIcon}>🎯</Text>
           <Text style={styles.finishedTitle}>Game Complete!</Text>
           <Text style={styles.performanceMessage}>{getPerformanceMessage()}</Text>
+          
+          {/* Leaderboard Animation */}
+          <LeaderboardAnimation entries={leaderboardEntries} />
           
           <View style={styles.scoreCard}>
             <View style={styles.scoreRow}>
