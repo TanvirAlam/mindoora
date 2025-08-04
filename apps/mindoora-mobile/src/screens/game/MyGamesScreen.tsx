@@ -69,6 +69,20 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
   const [invitationEmail, setInvitationEmail] = useState('');
   const [invitationStatus, setInvitationStatus] = useState<'pending' | 'accepted' | 'rejected' | 'none'>('none');
   const [currentGameId, setCurrentGameId] = useState<string | null>(null);
+  
+  // Track invitation status for each game
+  const [gameInvitationStatuses, setGameInvitationStatuses] = useState<Record<string, {
+    invitations: Array<{
+      id: string;
+      status: 'pending' | 'accepted' | 'rejected';
+      recipientEmail: string;
+      sentAt: string;
+    }>;
+    totalSent: number;
+    pendingCount: number;
+    acceptedCount: number;
+    rejectedCount: number;
+  }>>({});
 
   // Game room state
   const [isGameRoomVisible, setIsGameRoomVisible] = useState(false);
@@ -301,7 +315,45 @@ const handleSendInvitation = async () => {
 
       if (response.success) {
         setInvitationStatus('pending');
+        
+        // Generate unique invitation ID
+        const invitationId = `${currentGameId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Update the game invitation status with new structure
+        setGameInvitationStatuses(prev => {
+          const gameStatus = prev[currentGameId] || {
+            invitations: [],
+            totalSent: 0,
+            pendingCount: 0,
+            acceptedCount: 0,
+            rejectedCount: 0
+          };
+          
+          const newInvitation = {
+            id: invitationId,
+            status: 'pending' as const,
+            recipientEmail: invitationEmail,
+            sentAt: new Date().toISOString()
+          };
+          
+          const updatedInvitations = [...gameStatus.invitations, newInvitation];
+          
+          return {
+            ...prev,
+            [currentGameId]: {
+              invitations: updatedInvitations,
+              totalSent: updatedInvitations.length,
+              pendingCount: updatedInvitations.filter(inv => inv.status === 'pending').length,
+              acceptedCount: updatedInvitations.filter(inv => inv.status === 'accepted').length,
+              rejectedCount: updatedInvitations.filter(inv => inv.status === 'rejected').length
+            }
+          };
+        });
+        
         Alert.alert('Success', 'Invitation sent successfully!');
+        
+        // Clear the email input for next invitation
+        setInvitationEmail('');
       } else {
         Alert.alert('Error', response.message || 'Failed to send invitation.');
       }
@@ -738,6 +790,19 @@ const handleSendInvitation = async () => {
                         onPress={() => handleInviteGame(game)}
                       >
                         <Text style={styles.radialButtonIcon}>👥</Text>
+                        {/* Invitation Count Indicator */}
+                        {gameInvitationStatuses[game.id]?.totalSent > 0 && (
+                          <View style={[
+                            styles.invitationStatusIndicator,
+                            gameInvitationStatuses[game.id]?.pendingCount > 0 && styles.pendingIndicator,
+                            gameInvitationStatuses[game.id]?.acceptedCount > 0 && gameInvitationStatuses[game.id]?.pendingCount === 0 && styles.acceptedIndicator,
+                            gameInvitationStatuses[game.id]?.rejectedCount > 0 && gameInvitationStatuses[game.id]?.pendingCount === 0 && gameInvitationStatuses[game.id]?.acceptedCount === 0 && styles.rejectedIndicator
+                          ]}>
+                            <Text style={styles.invitationStatusText}>
+                              {gameInvitationStatuses[game.id]?.totalSent}
+                            </Text>
+                          </View>
+                        )}
                       </TouchableOpacity>
                       
                       {/* Right Button - DELETE */}
@@ -868,6 +933,17 @@ const handleSendInvitation = async () => {
                 <Text style={styles.sendButtonText}>Send Email Invitation</Text>
               </TouchableOpacity>
             </View>
+              {invitationStatus === 'accepted' 
+                ? 
+                   <Text style={styles.statusTextAccepted}>🎉 Invitation accepted!🎉</Text> 
+                : invitationStatus === 'rejected' 
+                ? 
+                    <Text style={styles.statusTextRejected}>❌ Invitation rejected</Text>
+                : invitationStatus === 'pending' 
+                ? 
+                    <Text style={styles.statusTextPending}>⏳ Waiting for acceptance...</Text> 
+                : null
+              }
           </View>
         </SafeAreaView>
       </Modal>
@@ -1842,6 +1918,70 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#e0e0e0',
     marginVertical: 20,
+  },
+  
+  // Status Text Styles
+  statusTextPending: {
+    fontSize: 14,
+    color: '#FF9800',
+    textAlign: 'center',
+    marginTop: 15,
+    fontStyle: 'italic',
+    backgroundColor: '#FFF3E0',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  statusTextAccepted: {
+    fontSize: 14,
+    color: '#4CAF50',
+    textAlign: 'center',
+    marginTop: 15,
+    fontWeight: '600',
+    backgroundColor: '#E8F5E8',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  statusTextRejected: {
+    fontSize: 14,
+    color: '#F44336',
+    textAlign: 'center',
+    marginTop: 15,
+    fontStyle: 'italic',
+    backgroundColor: '#FFEBEE',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  
+  // Invitation Status Indicator Styles
+  invitationStatusIndicator: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#6C757D', // Default grey
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  pendingIndicator: {
+    backgroundColor: '#FF9800', // Orange for pending
+  },
+  acceptedIndicator: {
+    backgroundColor: '#4CAF50', // Green for accepted
+  },
+  rejectedIndicator: {
+    backgroundColor: '#F44336', // Red for rejected
+  },
+  invitationStatusText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#fff',
   },
   
 });
