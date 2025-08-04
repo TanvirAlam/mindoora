@@ -6,6 +6,7 @@ export const Colors = {
   
   // Secondary colors
   secondary: '#FF6B35',      // Orange accent
+  secondaryDark: '#E55A2B',  // Dark orange
   secondaryLight: '#FFE4DD', // Light orange
   
   // Neutral colors
