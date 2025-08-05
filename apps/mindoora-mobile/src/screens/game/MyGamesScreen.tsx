@@ -291,7 +291,7 @@ onPress: () => handleSendCode(game),
   };
 
 const generateGameCode = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return Math.floor(1000 + Math.random() * 9000).toString();
   };
 
   const [gameCode, setGameCode] = useState('');
@@ -899,7 +899,7 @@ const handleSendInvitation = async () => {
                 <Text style={styles.gameCodeText}>{gameCode}</Text>
               </View>
               <Text style={styles.codeInstructions}>
-                Share this 6-digit code with players so they can join your game instantly!
+                Share this 4-digit code with players so they can join your game instantly!
               </Text>
             </View>
 

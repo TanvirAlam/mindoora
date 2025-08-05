@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import nodemailer from 'nodemailer';
 import { createTransporter } from '../../utils/nodemailer/nodemailerConfiguration';
 import { invitationEmailData } from '../../utils/nodemailer/invitationEmailData';
+import { sendMailgunEmail, validateMailgunConfig } from '../../utils/nodemailer/mailgunConfiguration';
 import { db } from '../../db/connection';
 import { UserGame, Register, User } from '../../db/schema';
 import { eq } from 'drizzle-orm';
@@ -91,16 +92,15 @@ const sender = await db
       senderName
     );
 
-    // Send email using dynamic transporter
-    const emailTransporter = await createTransporter();
-    const info = await emailTransporter.sendMail(mailData);
-    
-    // Log preview URL for Ethereal Email (test emails)
-    if (info.messageId && info.messageId.includes('ethereal')) {
-      console.log('📧 Preview URL:', nodemailer.getTestMessageUrl(info));
-    }
+// Send email using Mailgun
+    const mailResult = await sendMailgunEmail(
+      recipientEmail,
+      `Invitation to join "${gameTitle}" game`,
+      mailData.html,
+      mailData.text
+    );
 
-    console.log(`✅ Invitation email sent successfully to ${recipientEmail} for game "${gameTitle}" with code ${gameCode}`);
+    console.log(`✅ Invitation email sent successfully via Mailgun to ${recipientEmail} for game "${gameTitle}" with code ${gameCode}`);
 
     return res.status(200).json({
       success: true,
