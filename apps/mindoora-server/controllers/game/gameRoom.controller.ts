@@ -158,6 +158,17 @@ export const startGameController = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Game room has expired.' });
     }
 
+    // Check if there are at least 2 approved players
+    const approvedPlayersResult = await pool.query(
+      'SELECT COUNT(*) FROM "GamePlayers" WHERE "roomId" = $1 AND "isApproved" = true',
+      [roomId]
+    );
+    const approvedPlayersCount = parseInt(approvedPlayersResult.rows[0].count);
+    
+    if (approvedPlayersCount < 2) {
+      return res.status(400).json({ message: 'At least 2 players are required to start the game.' });
+    }
+
     // Update room status to 'started'
     const gameRoomResult = await pool.query(
       'UPDATE "GameRooms" SET status = $1 WHERE id = $2 RETURNING *',

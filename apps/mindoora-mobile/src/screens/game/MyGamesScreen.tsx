@@ -40,6 +40,10 @@ interface GameData {
   createdAt?: string;
   language?: string;
   nPlayer?: number;
+  roomId?: string; // Added for multiplayer games
+  inviteCode?: string; // Added for multiplayer games
+  gameStarted?: boolean; // Added to track if game has been started
+  playerId?: string; // Added to store player ID for multiplayer games
 }
 
 interface Question {
@@ -154,7 +158,7 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
     setRefreshing(false);
   };
 
-  const handlePlayGame = (game: GameData) => {
+  const handlePlayGame = async (game: GameData) => {
     if (!game.isReady) {
       Alert.alert(
         'Game Not Ready',
@@ -164,9 +168,35 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
       return;
     }
     
-    // Navigate to game room
-    setGameToPlay(game);
-    setIsGameRoomVisible(true);
+    // For single player mode, create a room and join it directly
+    try {
+      console.log('Creating game room for single player game:', game.id);
+      const gameRoom = await gameService.createGameRoom(game.id);
+
+      if (!gameRoom || !gameRoom.inviteCode) {
+        throw new Error('Failed to create game room or receive an invite code.');
+      }
+      
+      const fullInviteCode = gameRoom.inviteCode.toString();
+      console.log('✅ Single player game room created. Invite code:', fullInviteCode);
+
+      // Navigate to game room with proper invite code
+      setGameToPlay({
+        ...game,
+        roomId: gameRoom.roomId,
+        inviteCode: fullInviteCode,
+        gameStarted: false // Single player starts immediately
+      });
+      setIsGameRoomVisible(true);
+      
+    } catch (error) {
+      console.error('❌ Error creating game room for single player:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to create game room. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const handleGameRoomBack = () => {
@@ -650,15 +680,23 @@ const handleSendInvitation = async () => {
         gameId={lobbyGameId}
         inviteCode={lobbyInviteCode}
         isHost={true}
-        onStartGame={() => {
+        onStartGame={(playerData) => {
           setIsGameLobbyVisible(false);
-          // Find the game and include roomId from lobby
+          // Find the game and include roomId, inviteCode, and playerId from lobby
           const gameToStart = games.find(g => g.id === lobbyGameId);
-          if (gameToStart && gameRoomId) {
-            setGameToPlay({ ...gameToStart, roomId: gameRoomId });
+          if (gameToStart && gameRoomId && lobbyInviteCode) {
+            const gameWithPlayerData = { 
+              ...gameToStart, 
+              roomId: gameRoomId, 
+              inviteCode: lobbyInviteCode, // Include invite code from lobby
+              gameStarted: true, // Host is starting the game
+              playerId: playerData?.playerId // Include host's player ID
+            };
+            console.log('🎮 Host starting game with data:', gameWithPlayerData);
+            setGameToPlay(gameWithPlayerData);
             setIsGameRoomVisible(true);
           } else {
-            Alert.alert('Error', 'Game room ID not available. Please try again.');
+            Alert.alert('Error', 'Game room ID or invite code not available. Please try again.');
           }
         }}
         onBack={() => setIsGameLobbyVisible(false)}
@@ -676,7 +714,9 @@ const handleSendInvitation = async () => {
           title: gameToPlay.title,
           questionCount: gameToPlay.questionCount || gameToPlay.questionsCount || 0,
           maxQuestions: gameToPlay.maxQuestions,
-          roomId: gameToPlay.roomId || gameRoomId || ''
+          roomId: gameToPlay.roomId || gameRoomId || '',
+          inviteCode: gameToPlay.inviteCode, // Include invite code for single player games
+          gameStarted: gameToPlay.gameStarted !== false // Auto-start unless explicitly set to false
         }}
       />
     );

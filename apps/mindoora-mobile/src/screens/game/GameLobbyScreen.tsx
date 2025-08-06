@@ -9,7 +9,7 @@ interface GameLobbyScreenProps {
   gameId: string;
   inviteCode: string;
   isHost: boolean;
-  onStartGame: () => void;
+  onStartGame: (playerData?: { playerId: string; roomId: string }) => void;
   onBack: () => void;
 }
 
@@ -52,7 +52,16 @@ const GameLobbyScreen: React.FC<GameLobbyScreenProps> = ({ gameId, inviteCode, i
       console.log('🎮 Starting game with roomId:', roomId);
       const result = await gameService.startGame(roomId);
       console.log('🎮 Game started successfully:', result);
-      onStartGame();
+      
+      // Find the host player (admin role) and pass their ID
+      const hostPlayer = players.find(player => player.role === 'admin');
+      if (hostPlayer) {
+        console.log('🎮 Found host player:', { playerId: hostPlayer.id, roomId });
+        onStartGame({ playerId: hostPlayer.id, roomId });
+      } else {
+        console.warn('⚠️ Host player not found in players list');
+        onStartGame({ playerId: '', roomId }); // Continue without player ID as fallback
+      }
     } catch (error) {
       console.error('Error starting game:', error);
       Alert.alert('Error', error.message || 'Failed to start the game. Please try again.');

@@ -14,6 +14,7 @@ import {
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import authService from '../../services/auth/authService';
 import gameService from '../../services/gameService';
+import socketService from '../../services/socketService';
 import { Colors } from '../../constants/colors';
 import FireworksAnimation from '../../components/FireworksAnimation';
 import RainAnimation from '../../components/RainAnimation';
@@ -34,6 +35,7 @@ interface GameRoomScreenProps {
     maxQuestions: number;
     roomId: string;
     inviteCode?: string; // Add invite code as optional prop
+    gameStarted?: boolean; // Flag to indicate if game has been started by host
   };
 }
 
@@ -110,51 +112,115 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
       const currentUser = authService.getCurrentUser();
       if (!currentUser) return;
 
-      // TODO: Implement proper player ID fetching
-      // For now, we'll skip this to avoid the "Game Room Not Found" error
-      // The invite code needs to be passed from the parent component
+      // First, try to use player data that might be stored from the join game response
+      const storedGameData = gameData as any;
+      if (storedGameData.playerId) {
+        console.log('✅ Using stored player ID from join game response:', storedGameData.playerId);
+        setPlayerId(storedGameData.playerId);
+        return;
+      }
+
+      // If we don't have stored player data, try the API (with fallback logic)
       if (gameData.inviteCode) {
-        console.log('📋 Using invite code:', gameData.inviteCode);
-        const roomDetails = await gameService.getPlayersByInviteCode(gameData.inviteCode);
-        if (roomDetails && roomDetails.players) {
-          const currentPlayer = roomDetails.players.find(
-            player => player.role === 'admin' // Host is always admin
-          );
-          if (currentPlayer) {
-            setPlayerId(currentPlayer.id);
-            console.log('✅ Current player ID found:', currentPlayer.id);
+        console.log('📋 Attempting to fetch player data using invite code:', gameData.inviteCode);
+        
+        try {
+          const roomDetails = await gameService.getPlayersByInviteCode(gameData.inviteCode);
+          if (roomDetails && roomDetails.players) {
+            // Find the current user's player record by matching their name/identifier
+            const currentPlayer = roomDetails.players.find(
+              player => player.name === currentUser.name || player.role === 'admin'
+            ) || roomDetails.players[roomDetails.players.length - 1]; // Fallback to last player
+            
+            if (currentPlayer) {
+              setPlayerId(currentPlayer.id);
+              console.log('✅ Current player ID found via API:', {
+                playerId: currentPlayer.id,
+                playerName: currentPlayer.name,
+                playerRole: currentPlayer.role
+              });
+            } else {
+              console.warn('⚠️ No matching player found in room');
+            }
           }
+        } catch (apiError) {
+          console.error('❌ API fetch failed for started room, this is expected:', apiError.message);
+          // For started rooms, the API may not work, but we can still continue
+          // The game will fall back to the owner's questions endpoint
         }
       } else {
         console.log('⚠️ No invite code available, skipping player ID fetch');
       }
     } catch (error) {
-      console.error('Error fetching current player:', error);
+      console.error('Error in fetchCurrentPlayer:', error);
+      // Continue gracefully - questions may still load via owner endpoint
     }
+    
+    console.log('🔄 Continuing - questions will load via available endpoint');
   };
 
   const fetchGameQuestions = async () => {
     try {
+      console.log('🔄 Starting fetchGameQuestions...');
       setIsLoading(true);
       const currentUser = authService.getCurrentUser();
+      
+      console.log('👤 Current user check:', {
+        hasUser: !!currentUser,
+        hasToken: !!currentUser?.accessToken,
+        userId: currentUser?.id
+      });
       
       if (!currentUser || !currentUser.accessToken) {
         throw new Error('User is not authenticated.');
       }
       
-      const response = await fetch(`http://localhost:8080/api/games/questions?gameId=${gameData.id}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser.accessToken}`
-        }
-      });
+      let response;
+      let endpoint;
+      
+      // If we have roomId and playerId, use the multiplayer endpoint
+      if (gameData.roomId && playerId) {
+        endpoint = `http://localhost:8080/api/games/room-questions?roomId=${gameData.roomId}&playerId=${playerId}`;
+        console.log('🎮 Using multiplayer questions endpoint:', endpoint);
+        console.log('📋 Request params:', {
+          roomId: gameData.roomId,
+          playerId: playerId
+        });
+        
+        response = await fetch(endpoint, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentUser.accessToken}`
+          }
+        });
+      } else {
+        endpoint = `http://localhost:8080/api/games/questions?gameId=${gameData.id}`;
+        console.log('🎮 Using owner questions endpoint:', endpoint);
+        console.log('📋 Request params:', {
+          gameId: gameData.id
+        });
+        
+        response = await fetch(endpoint, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentUser.accessToken}`
+          }
+        });
+      }
+      
+      console.log('📡 Response status:', response.status);
+      console.log('📡 Response ok:', response.ok);
       
       if (!response.ok) {
-        throw new Error('Failed to fetch questions');
+        const errorText = await response.text();
+        console.error('❌ Response error:', errorText);
+        throw new Error(`Failed to fetch questions: ${response.status} - ${errorText}`);
       }
       
       const result = await response.json();
+      console.log('📦 Full response:', JSON.stringify(result, null, 2));
       
       if (result.success && result.data && result.data.questions) {
         console.log('🎯 Questions fetched successfully:', result.data.questions.length);
@@ -176,14 +242,23 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
           ...prev,
           totalQuestions: result.data.questions.length
         }));
+        console.log('✅ Questions state updated successfully');
       } else {
-        throw new Error('No questions found for this game');
+        console.error('❌ Invalid response format:', {
+          hasSuccess: !!result.success,
+          hasData: !!result.data,
+          hasQuestions: !!(result.data && result.data.questions),
+          questionsLength: result.data?.questions?.length || 0
+        });
+        throw new Error('No questions found for this game - invalid response format');
       }
     } catch (error) {
-      console.error('Error fetching questions:', error);
-      Alert.alert('Error', 'Failed to load game questions. Please try again.');
+      console.error('❌ Error fetching questions:', error);
+      console.error('❌ Error details:', error.message);
+      Alert.alert('Error', `Failed to load game questions: ${error.message}`);
       onBack();
     } finally {
+      console.log('🏁 Setting isLoading to false');
       setIsLoading(false);
     }
   };
@@ -403,14 +478,176 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
     return "💪 Keep learning! You'll do better next time!";
   };
 
+  // WebSocket Connection Functions
+  const initializeWebSocketConnection = () => {
+    if (!gameData.roomId || !playerId) {
+      console.log('⚠️ Missing roomId or playerId, skipping WebSocket connection');
+      return;
+    }
+
+    console.log('🔌 Initializing WebSocket connection for room:', gameData.roomId);
+    
+    // Connect to WebSocket
+    socketService.connect();
+    
+    // Join the game room
+    socketService.joinRoom(gameData.roomId, playerId);
+    
+    // Listen for game synchronization events
+    socketService.onGameStatus((data) => {
+      console.log('🎮 Received game status update:', data);
+      // Handle game status changes (start, question change, etc.)
+      if (data.status === 'question_change') {
+        syncWithHostQuestion(data);
+      }
+    });
+
+    // Listen for question synchronization
+    const socket = socketService.getSocket();
+    if (socket) {
+      socket.on('question_sync', (data) => {
+        console.log('🔄 Received question sync:', data);
+        syncWithHostQuestion(data);
+      });
+      
+      socket.on('timer_sync', (data) => {
+        console.log('⏰ Received timer sync:', data);
+        syncWithHostTimer(data);
+      });
+      
+      socket.on('game_state_sync', (data) => {
+        console.log('🎯 Received game state sync:', data);
+        syncWithHostGameState(data);
+      });
+    }
+  };
+
+  const cleanupWebSocketConnection = () => {
+    console.log('🔌 Cleaning up WebSocket connection');
+    
+    if (gameData.roomId) {
+      socketService.leaveRoom(gameData.roomId);
+    }
+    
+    socketService.offGameStatus();
+    
+    const socket = socketService.getSocket();
+    if (socket) {
+      socket.off('question_sync');
+      socket.off('timer_sync');
+      socket.off('game_state_sync');
+    }
+    
+    socketService.disconnect();
+  };
+
+  const syncWithHostQuestion = (data: any) => {
+    console.log('🔄 Syncing with host question:', data);
+    
+    if (data.questionIndex !== undefined && data.questionIndex !== gameState.currentQuestionIndex) {
+      console.log(`🔄 Updating question index from ${gameState.currentQuestionIndex} to ${data.questionIndex}`);
+      
+      setGameState(prev => ({
+        ...prev,
+        currentQuestionIndex: data.questionIndex,
+        selectedAnswer: null,
+        showFeedback: false,
+        isAnswered: false,
+        timeLeft: data.timeLeft || QUESTION_TIME_LIMIT,
+      }));
+      
+      // Reset and start timer for new question
+      resetTimer();
+      if (data.timeLeft && data.timeLeft > 0) {
+        // Sync timer with remaining time
+        setGameState(prev => ({ ...prev, timeLeft: data.timeLeft }));
+        timerProgress.setValue(data.timeLeft / QUESTION_TIME_LIMIT);
+      }
+      startTimer();
+    }
+  };
+
+  const syncWithHostTimer = (data: any) => {
+    console.log('⏰ Syncing with host timer:', data);
+    
+    if (data.timeLeft !== undefined) {
+      setGameState(prev => ({ ...prev, timeLeft: data.timeLeft }));
+      
+      // Sync animation progress
+      const progressValue = data.timeLeft / QUESTION_TIME_LIMIT;
+      timerProgress.setValue(progressValue);
+    }
+  };
+
+  const syncWithHostGameState = (data: any) => {
+    console.log('🎯 Syncing with host game state:', data);
+    
+    if (data.gameStarted && !isGameStarted) {
+      console.log('🎮 Host started game - auto-starting for guest');
+      setIsGameStarted(true);
+      startTimer();
+    }
+    
+    if (data.gameFinished && !gameState.gameFinished) {
+      console.log('🏁 Host finished game - ending for guest');
+      setGameState(prev => ({ ...prev, gameFinished: true }));
+    }
+  };
+
   useEffect(() => {
-    fetchGameQuestions();
+    console.log('🔍 GameRoomScreen mounted with gameData:', gameData);
     fetchCurrentPlayer();
     
     return () => {
       stopTimer();
+      // Cleanup WebSocket connection
+      cleanupWebSocketConnection();
     };
   }, []);
+  
+  // Fetch questions when playerId is available, or immediately if no roomId
+  useEffect(() => {
+    if (!gameData.roomId || playerId) {
+      console.log('🎯 Fetching questions - roomId:', gameData.roomId, 'playerId:', playerId);
+      fetchGameQuestions();
+    }
+  }, [playerId, gameData.roomId]);
+  
+  // Initialize WebSocket connection when playerId is available
+  useEffect(() => {
+    if (playerId && gameData.roomId) {
+      console.log('🔌 Initializing WebSocket connection with playerId:', playerId);
+      initializeWebSocketConnection();
+    }
+  }, [playerId, gameData.roomId]);
+  
+  // Debug: Track gameData changes
+  useEffect(() => {
+    console.log('🔍 GameData prop changed:', {
+      id: gameData.id,
+      title: gameData.title,
+      roomId: gameData.roomId,
+      gameStarted: gameData.gameStarted,
+      inviteCode: gameData.inviteCode
+    });
+  }, [gameData]);
+
+  // Auto-start game if it has already been started by the host
+  useEffect(() => {
+    console.log('🎮 Auto-start check:', {
+      gameStarted: gameData.gameStarted,
+      isLoading,
+      questionsLength: questions.length,
+      isGameStarted,
+      shouldAutoStart: gameData.gameStarted && !isLoading && questions.length > 0 && !isGameStarted
+    });
+    
+    if (gameData.gameStarted && !isLoading && questions.length > 0 && !isGameStarted) {
+      console.log('🎮 Auto-starting game - host has already started it');
+      setIsGameStarted(true);
+      startTimer();
+    }
+  }, [gameData.gameStarted, isLoading, questions.length, isGameStarted]);
 
   useEffect(() => {
     if (!isGameStarted || gameState.gameFinished || !gameData.roomId) {

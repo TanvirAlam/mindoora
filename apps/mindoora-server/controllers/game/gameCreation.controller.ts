@@ -61,10 +61,10 @@ export const createGameWithQuestionsController = async (req: Request<{}, {}, Gam
     // Start transaction
     await client.query('BEGIN');
 
-    // Create the game (assuming English as default language and single player)
+    // Create the game (assuming English as default language and support for up to 5 players)
     const gameResult = await client.query(
       'INSERT INTO "UserGame" (title, language, "nPlayer", "user") VALUES ($1, $2, $3, $4) RETURNING *',
-      [title, 'en', 1, user]
+      [title, 'en', 5, user]
     );
     const game = gameResult.rows[0];
 
@@ -321,6 +321,94 @@ export const getMyGamesController = async (req: Request, res: Response) => {
     return res.status(500).json({ 
       success: false, 
       error: 'Failed to fetch your games',
+      message: error.message
+    });
+  }
+};
+
+// New endpoint for multiplayer game participants to access questions
+export const getGameQuestionsForRoomController = async (req: Request, res: Response) => {
+  try {
+    const { roomId, playerId } = req.query;
+
+    if (!roomId || !playerId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Room ID and Player ID are required' 
+      });
+    }
+
+    // Verify the player is part of this room
+    const playerResult = await pool.query(
+      'SELECT * FROM "GamePlayers" WHERE id = $1 AND "roomId" = $2',
+      [playerId, roomId]
+    );
+
+    if (playerResult.rows.length === 0) {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Player not found in this room or access denied' 
+      });
+    }
+
+    // Get the game room to find the gameId
+    const roomResult = await pool.query(
+      'SELECT "gameId" FROM "GameRooms" WHERE id = $1',
+      [roomId]
+    );
+
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Game room not found' 
+      });
+    }
+
+    const gameId = roomResult.rows[0].gameId;
+
+    // Get the game details
+    const gameResult = await pool.query(
+      'SELECT * FROM "UserGame" WHERE id = $1',
+      [gameId]
+    );
+
+    if (gameResult.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Game not found' 
+      });
+    }
+
+    const game = gameResult.rows[0];
+
+    // Get all questions for the game
+    const questionsResult = await pool.query(
+      'SELECT id, question, answer, options, "timeLimit", "qSource", "qPoints", "createdAt" FROM "Questions" WHERE "gameId" = $1 ORDER BY "createdAt"',
+      [gameId]
+    );
+
+    const questions = questionsResult.rows;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        game: {
+          id: game.id,
+          title: game.title,
+          language: game.language,
+          nPlayer: game.nPlayer
+        },
+        questions,
+        questionsCount: questions.length,
+        maxQuestions: 20
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching game questions for room:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch game questions',
       message: error.message
     });
   }

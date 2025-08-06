@@ -13,6 +13,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import gameService from '../../services/gameService';
 import authService from '../../services/auth/authService';
+import WaitingForHostScreen from './WaitingForHostScreen';
 
 interface JoinGameScreenProps {
   onBack: () => void;
@@ -22,6 +23,7 @@ interface JoinGameScreenProps {
     playerId: string;
     gameId: string;
     playerName: string;
+    gameStarted?: boolean; // Add gameStarted flag for multiplayer sync
   }) => void;
 }
 
@@ -29,6 +31,23 @@ const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) =
   const [gameCode, setGameCode] = useState(['', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const inputRefs = useRef<(TextInput | null)[]>([]);
+  
+  // Waiting for host approval state
+  const [waitingForHost, setWaitingForHost] = useState(false);
+  const [playerData, setPlayerData] = useState<{
+    inviteCode: string;
+    playerName: string;
+    gameData: {
+      gameCode: string;
+      roomId: string;
+      playerId: string;
+      gameId: string;
+      playerName: string;
+    };
+    // Add room and player IDs for WebSocket
+    roomId: string;
+    playerId: string;
+  } | null>(null);
 
   const handleCodeChange = (value: string, index: number) => {
     if (value.length > 1) return; // Only allow single digit
@@ -91,14 +110,32 @@ const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) =
           playerName: response.data.player.name
         };
         
-        if (onJoinGame) {
-          onJoinGame(gameData);
+        // All players are auto-approved but must wait for host to start the game
+        // Check if this is the host (admin role) or a guest player
+        const isHost = response.data.player.role === 'admin';
+        
+        if (isHost) {
+          // Host goes directly to game management
+          if (onJoinGame) {
+            onJoinGame(gameData);
+          } else {
+            Alert.alert(
+              'Welcome Host! 🎉', 
+              `You've joined as the host. You can start the game when ready!`,
+              [{ text: 'OK' }]
+            );
+          }
         } else {
-          Alert.alert(
-            'Success! 🎉', 
-            `You've joined the game as ${response.data.player.name}!\n\n${response.data.player.isApproved ? 'You can start playing now.' : 'Waiting for host approval...'}`,
-            [{ text: 'OK' }]
-          );
+          // Guest players wait for host to start the game
+          setPlayerData({
+            inviteCode: code,
+            playerName: response.data.player.name,
+            gameData,
+            // Add room and player IDs for WebSocket connection
+            roomId: response.data.player.roomId,
+            playerId: response.data.player.id
+          });
+          setWaitingForHost(true);
         }
       } else {
         throw new Error(response.message || 'Failed to join game.');
@@ -116,7 +153,52 @@ const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) =
     inputRefs.current[0]?.focus();
   };
 
+  const handleWaitingBack = () => {
+    setWaitingForHost(false);
+    setPlayerData(null);
+  };
+
+  const handleApproved = () => {
+    if (playerData && onJoinGame) {
+      // Add flag to indicate game has been started by host and include player ID
+      const gameDataWithStartedFlag = {
+        ...playerData.gameData,
+        gameStarted: true, // This flag tells GameRoomScreen to skip pre-game screen
+        playerId: playerData.playerId, // Include the player ID for multiplayer functionality
+        roomId: playerData.roomId, // Ensure room ID is also included
+        inviteCode: playerData.inviteCode // Include invite code
+      };
+      console.log('🎮 Game started! Transitioning to game screen with data:', gameDataWithStartedFlag);
+      onJoinGame(gameDataWithStartedFlag);
+    }
+    setWaitingForHost(false);
+    setPlayerData(null);
+  };
+
+  const handleRejected = () => {
+    Alert.alert(
+      'Access Denied',
+      'The host has denied your request to join the game.',
+      [{ text: 'OK', onPress: handleWaitingBack }]
+    );
+  };
+
   const isCodeComplete = gameCode.every(digit => digit !== '');
+
+  // Show waiting screen if player is waiting for host approval
+  if (waitingForHost && playerData) {
+    return (
+      <WaitingForHostScreen
+        onBack={handleWaitingBack}
+        inviteCode={playerData.inviteCode}
+        playerName={playerData.playerName}
+        onApproved={handleApproved}
+        onRejected={handleRejected}
+        roomId={playerData.roomId}
+        playerId={playerData.playerId}
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>

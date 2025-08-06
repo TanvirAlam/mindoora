@@ -57,13 +57,13 @@ export const createGamePlayerController = async (req: Request<{}, {}, createGame
 
     if (!player) {
       if (numberOfApprovedPlayers.length < userGame.nPlayer) {
-        console.log('➕ Creating new player as guest');
+        console.log('➕ Creating new player as guest (auto-approved)');
         const newPlayerResult = await pool.query(
           'INSERT INTO "GamePlayers" ("roomId", name, role, "isApproved") VALUES ($1, $2, $3, $4) RETURNING *',
           [room.id, name, 'guest', true]
         )
         player = newPlayerResult.rows[0]
-        console.log('✅ New player created:', { id: player.id, name: player.name, role: player.role });
+        console.log('✅ New player created and auto-approved:', { id: player.id, name: player.name, role: player.role, isApproved: player.isApproved });
       } else {
         return res.status(400).json({ message: 'Room Capacity is full' })
       }
@@ -93,10 +93,10 @@ export const getPlayersByInviteCodeController = async (req: Request, res: Respon
     
     if(missingParams({inviteCode}, res))return;
 
-    // Find room by invite code
+    // Find room by invite code (include started status for active games)
     const roomResult = await pool.query(
-      'SELECT * FROM "GameRooms" WHERE "inviteCode" = $1 AND status IN ($2, $3) LIMIT 1',
-      [inviteCode, 'created', 'live']
+      'SELECT * FROM "GameRooms" WHERE "inviteCode" = $1 AND status IN ($2, $3, $4) LIMIT 1',
+      [inviteCode, 'created', 'live', 'started']
     )
     const room = roomResult.rows[0]
 

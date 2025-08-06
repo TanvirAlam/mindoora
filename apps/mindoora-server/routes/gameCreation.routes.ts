@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createGameWithQuestionsController, getGameQuestionsController, getMyGamesController, deleteGameController } from '../controllers/game/gameCreation.controller';
+import { createGameWithQuestionsController, getGameQuestionsController, getMyGamesController, deleteGameController, getGameQuestionsForRoomController } from '../controllers/game/gameCreation.controller';
 import { authenticateJWT } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -28,6 +28,14 @@ router.post('/', authenticateJWT, createGameWithQuestionsController);
  * @query gameId: string
  */
 router.get('/questions', authenticateJWT, getGameQuestionsController);
+
+/**
+ * @route GET /api/games/room-questions
+ * @desc Get questions for multiplayer game room participants
+ * @access Private (requires authentication)
+ * @query roomId: string, playerId: string
+ */
+router.get('/room-questions', authenticateJWT, getGameQuestionsForRoomController);
 
 /**
  * @route GET /api/games/my-games
