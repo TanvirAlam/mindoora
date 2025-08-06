@@ -232,6 +232,9 @@ importers:
       react-native-webview:
         specifier: ^13.13.5
         version: 13.13.5(react-native@0.79.5(@babel/core@7.28.0)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+      socket.io-client:
+        specifier: ^4.8.1
+        version: 4.8.1
       three:
         specifier: ^0.166.1
         version: 0.166.1
