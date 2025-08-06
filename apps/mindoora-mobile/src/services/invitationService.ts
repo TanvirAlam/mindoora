@@ -1,4 +1,8 @@
 import authService from './auth/authService';
+import emailService from './emailService';
+import simpleEmailService from './simpleEmailService';
+import freeEmailService from './freeEmailService';
+import webhookEmailService from './webhookEmailService';
 
 export interface GameInvitation {
   id: string;
@@ -43,64 +47,61 @@ class InvitationService {
     };
   }
 
-  // Send invitation to a player
+  // Send invitation to a player using webhook email service
   async sendInvitation(request: InvitePlayerRequest): Promise<InvitationResponse> {
     try {
-      console.log('Sending invitation request:', request);
-      console.log('Using endpoint:', `${this.baseUrl}/invitations/send`);
+      console.log('Sending invitation via webhook email service:', request);
       
-      const headers = this.getAuthHeaders();
-      console.log('Request headers:', headers);
+      // Get current user info
+      const currentUser = authService.getCurrentUser();
+      const senderName = 'tanvir.alam.shawn@gmail.com'; // Override with specific email
       
-      const response = await fetch(`${this.baseUrl}/invitations/send`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(request)
+      // Try sending email using webhook email service first
+      let emailResult = await webhookEmailService.sendInvitation({
+        recipientEmail: request.recipientEmail,
+        senderName: senderName,
+        gameTitle: `Game (${request.gameCode})`, // Using game code as title for now
+        gameCode: request.gameCode
       });
+      
+      // If webhook service fails, try the free email service as fallback
+      if (!emailResult.success) {
+        console.log('🔄 Trying fallback free email service...');
+        emailResult = await freeEmailService.sendInvitation({
+          recipientEmail: request.recipientEmail,
+          senderName: senderName,
+          gameTitle: `Game (${request.gameCode})`,
+          gameCode: request.gameCode
+        });
+      }
 
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-
-      if (!response.ok) {
-        // Check if it's a 404 (endpoint not found) or other backend issue
-        if (response.status === 404) {
-          // Backend doesn't have invitation endpoints yet - provide a mock success response
-          console.warn('Invitation endpoints not implemented in backend yet. Using mock response.');
-          return {
-            success: true,
-            message: 'Invitation feature is not yet implemented on the server, but your request has been logged.',
-            invitation: {
-              id: `mock-${Date.now()}`,
-              gameId: request.gameId,
-              senderId: 'current-user',
-              senderName: 'You',
-              recipientId: 'unknown',
-              recipientEmail: request.recipientEmail,
-              gameTitle: 'Game',
-              status: 'pending',
-              sentAt: new Date().toISOString(),
-              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
-            }
-          };
-        }
+      if (emailResult.success) {
+        console.log('✅ Email invitation sent successfully');
         
-        const errorData = await response.json().catch(() => ({}));
-        console.error('API Error response:', errorData);
-        throw new Error(errorData.message || `Server error: ${response.status} ${response.statusText}`);
+        // Return success response with mock invitation data
+        return {
+          success: true,
+          message: 'Invitation sent successfully!',
+          invitation: {
+            id: `free-email-${Date.now()}`,
+            gameId: request.gameId,
+            senderId: currentUser?.uid || 'current-user',
+            senderName: senderName,
+            recipientId: 'unknown',
+            recipientEmail: request.recipientEmail,
+            gameTitle: `Game (${request.gameCode})`,
+            status: 'pending',
+            sentAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
+          }
+        };
+      } else {
+        throw new Error(emailResult.message || 'Failed to send email invitation');
       }
-
-      const result = await response.json();
-      console.log('Invitation sent successfully:', result);
-      return result;
+      
     } catch (error) {
-      console.error('Error sending invitation:', error);
-      
-      // If it's a network error or other connection issue
-      if (error.message.includes('Network request failed') || error.message.includes('fetch')) {
-        throw new Error('Unable to connect to the server. Please check your internet connection and try again.');
-      }
-      
-      throw error;
+      console.error('❌ Error sending invitation:', error);
+      throw new Error('Failed to send invitation. Please try again.');
     }
   }
 

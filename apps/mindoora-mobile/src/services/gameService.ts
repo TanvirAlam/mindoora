@@ -32,7 +32,7 @@ export interface JoinGameResponse {
 export interface GameRoom {
   id: string;
   gameId: string;
-  status: 'live' | 'finished' | 'closed' | 'created';
+  status: 'waiting' | 'started' | 'live' | 'finished' | 'closed' | 'created';
   inviteCode: string;
   user: string;
   expiredAt: string;
@@ -67,11 +67,9 @@ class GameService {
     try {
       console.log('🎮 Joining game with code:', request.inviteCode);
       
-      const response = await fetch(`${this.baseUrl}/gamePlayerOpen/create`, {
+      const response = await fetch(`${this.baseUrl}/v1/ogameplayer/create`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: this.getAuthHeaders(),
         body: JSON.stringify(request)
       });
 
@@ -110,7 +108,7 @@ class GameService {
   // Get all players in a room
   async getRoomPlayers(roomId: string, playerId: string): Promise<GamePlayer[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/gamePlayerOpen/allplayer?roomId=${roomId}&playerId=${playerId}`, {
+      const response = await fetch(`${this.baseUrl}/v1/ogameplayer/allplayer?roomId=${roomId}&playerId=${playerId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -139,7 +137,7 @@ class GameService {
     points: number;
   }>> {
     try {
-      const response = await fetch(`${this.baseUrl}/gamePlayerOpen/result?roomId=${roomId}&playerId=${playerId}`, {
+      const response = await fetch(`${this.baseUrl}/v1/ogameplayer/result?roomId=${roomId}&playerId=${playerId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -162,7 +160,7 @@ class GameService {
   // Create a game room (for authenticated users)
   async createGameRoom(gameId: string) {
     try {
-      const response = await fetch(`${this.baseUrl}/gameRoom/create`, {
+      const response = await fetch(`${this.baseUrl}/v1/gameroom/create`, {
         method: 'POST',
         headers: this.getAuthHeaders(),
         body: JSON.stringify({ gameId })
@@ -184,7 +182,7 @@ class GameService {
   // Get game room by ID
   async getGameRoom(roomId: string) {
     try {
-      const response = await fetch(`${this.baseUrl}/gameRoom/one?id=${roomId}`, {
+      const response = await fetch(`${this.baseUrl}/v1/gameroom/one?id=${roomId}`, {
         method: 'GET',
         headers: this.getAuthHeaders()
       });
@@ -202,10 +200,91 @@ class GameService {
     }
   }
 
-  // Update game room status
-  async updateGameRoomStatus(roomId: string, status: 'live' | 'finished' | 'closed' | 'created') {
+  // Get players by invite code (mobile-friendly API)
+  async getPlayersByInviteCode(inviteCode: string): Promise<{
+    room: {
+      id: string;
+      status: string;
+      inviteCode: string;
+      expiredAt: string;
+    };
+    players: GamePlayer[];
+  }> {
     try {
-      const response = await fetch(`${this.baseUrl}/gameRoom/update`, {
+      console.log('🔍 Looking up room by invite code:', inviteCode);
+      
+      // Try with authentication first (for verification purposes)
+      let headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      try {
+        const authHeaders = this.getAuthHeaders();
+        headers = { ...headers, ...authHeaders };
+        console.log('🔍 Using authenticated request for room lookup');
+      } catch (authError) {
+        console.log('🔍 No authentication available, trying unauthenticated request');
+      }
+      
+      const response = await fetch(`${this.baseUrl}/v1/ogameplayer/players-by-code?inviteCode=${inviteCode}`, {
+        method: 'GET',
+        headers
+      });
+
+      console.log('🔍 Response status:', response.status);
+      console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        console.error('🔍 Raw error response:', responseText);
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error('🔍 Failed to parse error response as JSON');
+          errorData = { message: responseText || `HTTP ${response.status} error` };
+        }
+        
+        console.error('🔍 Parsed error response:', errorData);
+        throw new Error(errorData.message || `Game room not found with code ${inviteCode}`);
+      }
+
+      const result = await response.json();
+      console.log('🔍 Found room details:', result.result);
+      return result.result;
+    } catch (error) {
+      console.error('❌ Error fetching players by invite code:', error);
+      throw error;
+    }
+  }
+
+  // Start a game (only for room admin)
+  async startGame(roomId: string) {
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/gameroom/start`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ roomId })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status} error`);
+      }
+
+      const result = await response.json();
+      return result.result?.gameRoom;
+    } catch (error) {
+      console.error('Error starting game:', error);
+      throw error;
+    }
+  }
+
+  // Update game room status
+  async updateGameRoomStatus(roomId: string, status: 'waiting' | 'started' | 'live' | 'finished' | 'closed') {
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/gameroom/update`, {
         method: 'PUT',
         headers: this.getAuthHeaders(),
         body: JSON.stringify({ id: roomId, status })
@@ -221,6 +300,67 @@ class GameService {
     } catch (error) {
       console.error('Error updating game room status:', error);
       throw error;
+    }
+  }
+
+  // Submit player answer with timing
+  async submitAnswer(roomId: string, playerId: string, questionId: string, answer: number, timeToAnswer: number) {
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/questionsolved/create`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ 
+          playerId,
+          questionId, 
+          answer, 
+          timeTaken: timeToAnswer 
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status} error`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('Error submitting answer:', error);
+      throw error;
+    }
+  }
+
+  // Get real-time game progress for all players
+  async getGameProgress(roomId: string): Promise<{
+    players: Array<{
+      id: string;
+      name: string;
+      imgUrl?: string;
+      currentQuestion: number;
+      score: number;
+      isAnswered: boolean;
+      answerTime?: number;
+      isOnline: boolean;
+    }>;
+    currentQuestion: number;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/ogameplayer/progress?roomId=${roomId}`, {
+        method: 'GET',
+        headers: this.getAuthHeaders()
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status} error`);
+      }
+
+      const result = await response.json();
+      return result.result || { players: [], currentQuestion: 0 };
+    } catch (error) {
+      console.error('Error fetching game progress:', error);
+      // Return empty data instead of throwing to prevent breaking the game
+      return { players: [], currentQuestion: 0 };
     }
   }
 }

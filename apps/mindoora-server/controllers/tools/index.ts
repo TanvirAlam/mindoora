@@ -12,6 +12,7 @@ const tableNames: Record<string, string> = {
     questions: 'Questions',
     userGameDetails: 'UserGameDetails',
     gameRooms: 'GameRooms',
+    gamePlayers: 'GamePlayers',
     questionsSolved: 'QuestionsSolved',
     subscription: 'Subscription',
     feedback: 'Feedback',

@@ -6,59 +6,123 @@ import { missingParams } from '../tools'
 export const createGamePlayerController = async (req: Request<{}, {}, createGamePlayersType>, res: Response) => {
   try {
     const { inviteCode, name } = req.body
+    console.log('🎮 JOIN GAME REQUEST:', { inviteCode, name });
+    
     createGamePlayersSchema.parse(req.body)
 
-    // Find live room by invite code
-    const liveRoomResult = await pool.query(
-      'SELECT * FROM "gameRooms" WHERE "inviteCode" = $1 AND status IN ($2, $3) LIMIT 1',
-      [inviteCode, 'live', 'created']
+    // Find room by invite code (created status means waiting for players)
+    console.log('🔍 Searching for room with invite code:', inviteCode);
+    const roomResult = await pool.query(
+      'SELECT * FROM "GameRooms" WHERE "inviteCode" = $1 AND status = $2 LIMIT 1',
+      [inviteCode, 'created']
     )
-    const isLiveRoom = liveRoomResult.rows[0]
-    if (!isLiveRoom) return res.status(404).json({ message: 'Room not found' });
+    const room = roomResult.rows[0]
+    console.log('🏠 Room found:', room ? { id: room.id, inviteCode: room.inviteCode, status: room.status } : 'NOT FOUND');
+    
+    if (!room) {
+      // Let's also check if room exists with different status
+      const anyRoomResult = await pool.query(
+        'SELECT * FROM "GameRooms" WHERE "inviteCode" = $1 LIMIT 1',
+        [inviteCode]
+      )
+      const anyRoom = anyRoomResult.rows[0]
+      console.log('🔍 Room with any status:', anyRoom ? { id: anyRoom.id, status: anyRoom.status } : 'NOT FOUND');
+      
+      return res.status(404).json({ message: 'Room not found or already started' });
+    }
 
     // Get user game details
     const userGameResult = await pool.query(
-      'SELECT * FROM "userGame" WHERE id = $1',
-      [isLiveRoom.gameId]
+      'SELECT * FROM "UserGame" WHERE id = $1',
+      [room.gameId]
     )
     const userGame = userGameResult.rows[0]
 
     // Check if player already exists
+    console.log('👤 Checking if player exists:', { roomId: room.id, name });
     const playerResult = await pool.query(
-      'SELECT * FROM "gamePlayers" WHERE "roomId" = $1 AND name = $2 LIMIT 1',
-      [isLiveRoom.id, name]
+      'SELECT * FROM "GamePlayers" WHERE "roomId" = $1 AND name = $2 LIMIT 1',
+      [room.id, name]
     )
     let player = playerResult.rows[0]
+    console.log('👤 Player found:', player ? { id: player.id, name: player.name, role: player.role, isApproved: player.isApproved } : 'NOT FOUND');
 
     // Count approved players
     const approvedPlayersResult = await pool.query(
-      'SELECT * FROM "gamePlayers" WHERE "roomId" = $1 AND "isApproved" = true',
-      [isLiveRoom.id]
+      'SELECT * FROM "GamePlayers" WHERE "roomId" = $1 AND "isApproved" = true',
+      [room.id]
     )
     const numberOfApprovedPlayers = approvedPlayersResult.rows
+    console.log('✅ Approved players count:', numberOfApprovedPlayers.length, '/ Max:', userGame.nPlayer);
 
     if (!player) {
       if (numberOfApprovedPlayers.length < userGame.nPlayer) {
+        console.log('➕ Creating new player as guest');
         const newPlayerResult = await pool.query(
-          'INSERT INTO "gamePlayers" ("roomId", name, role, "isApproved") VALUES ($1, $2, $3, $4) RETURNING *',
-          [isLiveRoom.id, name, 'guest', false]
+          'INSERT INTO "GamePlayers" ("roomId", name, role, "isApproved") VALUES ($1, $2, $3, $4) RETURNING *',
+          [room.id, name, 'guest', true]
         )
         player = newPlayerResult.rows[0]
+        console.log('✅ New player created:', { id: player.id, name: player.name, role: player.role });
       } else {
-        return res.status(404).json({ message: 'Room Capacity is full' })
+        return res.status(400).json({ message: 'Room Capacity is full' })
       }
+    } else {
+      // Player already exists, just return their info
+      console.log('👤 Player already exists in room, returning existing player info');
     }
 
     // Get all players in the room
     const allPlayerResult = await pool.query(
-      'SELECT * FROM "gamePlayers" WHERE "roomId" = $1',
-      [isLiveRoom.id]
+      'SELECT * FROM "GamePlayers" WHERE "roomId" = $1',
+      [room.id]
     )
     const allPlayer = allPlayerResult.rows
 
-    req.io.to(isLiveRoom.id).emit('players_response', allPlayer)
+    req.io.to(room.id).emit('players_response', allPlayer)
 
     return res.status(201).json({ message: 'Game player Created.', player, gameId: userGame.id, allPlayer })
+  } catch (error) {
+    return res.status(500).json(error)
+  }
+}
+
+export const getPlayersByInviteCodeController = async (req: Request, res: Response) => {
+  try {
+    const inviteCode = req.query?.inviteCode as string;
+    
+    if(missingParams({inviteCode}, res))return;
+
+    // Find room by invite code
+    const roomResult = await pool.query(
+      'SELECT * FROM "GameRooms" WHERE "inviteCode" = $1 AND status IN ($2, $3) LIMIT 1',
+      [inviteCode, 'created', 'live']
+    )
+    const room = roomResult.rows[0]
+
+    if(!room){
+      return res.status(404).json({ message: 'Game Room Not Found' })
+    }
+
+    // Get all players in the room
+    const allPlayersResult = await pool.query(
+      'SELECT id, name, "imgUrl", role, "isApproved", "createdAt" FROM "GamePlayers" WHERE "roomId" = $1 ORDER BY "createdAt" ASC',
+      [room.id]
+    )
+    const allPlayers = allPlayersResult.rows
+
+    return res.status(200).json({ 
+      message: 'Got all players successfully', 
+      result: {
+        room: {
+          id: room.id,
+          status: room.status,
+          inviteCode: room.inviteCode,
+          expiredAt: room.expiredAt
+        },
+        players: allPlayers
+      }
+    })
   } catch (error) {
     return res.status(500).json(error)
   }
@@ -74,7 +138,7 @@ export const getAllPlayersOfARoomController = async (req: Request, res: Response
 
     // Find room that is not closed
     const liveRoomResult = await pool.query(
-      'SELECT * FROM "gameRooms" WHERE id = $1 AND status != $2',
+      'SELECT * FROM "GameRooms" WHERE id = $1 AND status != $2',
       [roomId, 'closed']
     )
     const isLiveRoom = liveRoomResult.rows[0]
@@ -85,7 +149,7 @@ export const getAllPlayersOfARoomController = async (req: Request, res: Response
 
     // Check if player is approved
     const approvedPlayerResult = await pool.query(
-      'SELECT * FROM "gamePlayers" WHERE id = $1 AND "isApproved" = true LIMIT 1',
+      'SELECT * FROM "GamePlayers" WHERE id = $1 AND "isApproved" = true LIMIT 1',
       [playerId]
     )
     const isApprovedPlayer = approvedPlayerResult.rows[0]
@@ -96,7 +160,7 @@ export const getAllPlayersOfARoomController = async (req: Request, res: Response
 
     // Get all approved players in the room
     const allPlayersResult = await pool.query(
-      'SELECT * FROM "gamePlayers" WHERE "roomId" = $1 AND "isApproved" = true',
+      'SELECT * FROM "GamePlayers" WHERE "roomId" = $1 AND "isApproved" = true',
       [roomId]
     )
     const allPlayers = allPlayersResult.rows
@@ -116,7 +180,7 @@ export const getResultOfARoomController = async (req: Request, res: Response) =>
 
     // Check if player has access (is approved)
     const userAccessResult = await pool.query(
-      'SELECT * FROM "gamePlayers" WHERE id = $1 AND "isApproved" = true LIMIT 1',
+      'SELECT * FROM "GamePlayers" WHERE id = $1 AND "isApproved" = true LIMIT 1',
       [playerId]
     )
     const userAccess = userAccessResult.rows[0]
@@ -127,7 +191,7 @@ export const getResultOfARoomController = async (req: Request, res: Response) =>
 
     // Check if room exists and is finished
     const finishedRoomResult = await pool.query(
-      'SELECT * FROM "gameRooms" WHERE id = $1 AND status = $2',
+      'SELECT * FROM "GameRooms" WHERE id = $1 AND status = $2',
       [roomId, 'finished']
     )
     const isLiveRoom = finishedRoomResult.rows[0]
@@ -138,7 +202,7 @@ export const getResultOfARoomController = async (req: Request, res: Response) =>
 
     // Get all approved players in the room
     const playersResult = await pool.query(
-      'SELECT * FROM "gamePlayers" WHERE "roomId" = $1 AND "isApproved" = true',
+      'SELECT * FROM "GamePlayers" WHERE "roomId" = $1 AND "isApproved" = true',
       [roomId]
     )
     const players = playersResult.rows
@@ -148,7 +212,7 @@ export const getResultOfARoomController = async (req: Request, res: Response) =>
     for (const player of players) {
       // Get questions solved by this player
       const questionSolvedResult = await pool.query(
-        'SELECT * FROM "questionsSolved" WHERE "playerId" = $1',
+        'SELECT * FROM "QuestionsSolved" WHERE "playerId" = $1',
         [player.id]
       )
       const questionSolved = questionSolvedResult.rows
@@ -170,6 +234,74 @@ export const getResultOfARoomController = async (req: Request, res: Response) =>
 
     return res.status(201).json({ message: 'Got Result of a game room successfully', result })
   } catch (error) {
+    return res.status(500).json(error)
+  }
+}
+
+export const getGameProgressController = async (req: Request, res: Response) => {
+  try {
+    let roomId = req.query?.roomId as string;
+    
+    if(missingParams({roomId}, res)) return;
+
+    // Find room that is not closed
+    const liveRoomResult = await pool.query(
+      'SELECT * FROM "GameRooms" WHERE id = $1 AND status IN ($2, $3, $4)',
+      [roomId, 'live', 'started', 'created']
+    )
+    const isLiveRoom = liveRoomResult.rows[0]
+
+    if(!isLiveRoom){
+      return res.status(404).json({ message: 'Game Room Not Found or Not Active' })
+    }
+
+    // Get all approved players in the room
+    const playersResult = await pool.query(
+      'SELECT * FROM "GamePlayers" WHERE "roomId" = $1 AND "isApproved" = true ORDER BY "createdAt" ASC',
+      [roomId]
+    )
+    const players = playersResult.rows
+
+    let progressData = [];
+    let currentQuestion = 0;
+
+    for (const player of players) {
+      // Get questions solved by this player
+      const questionSolvedResult = await pool.query(
+        'SELECT * FROM "QuestionsSolved" WHERE "playerId" = $1 ORDER BY "createdAt" DESC',
+        [player.id]
+      )
+      const questionSolved = questionSolvedResult.rows
+      
+      const score = questionSolved.reduce((sum: number, q: any) => sum + q.point, 0);
+      const currentQuestionNumber = questionSolved.length;
+      const isAnswered = questionSolved.length > 0;
+      const latestAnswerTime = questionSolved.length > 0 ? questionSolved[0].timeToAnswer : undefined;
+      
+      if (currentQuestionNumber > currentQuestion) {
+        currentQuestion = currentQuestionNumber;
+      }
+
+      progressData.push({
+        id: player.id,
+        name: player.name,
+        imgUrl: player.imgUrl,
+        currentQuestion: currentQuestionNumber,
+        score: score,
+        isAnswered: isAnswered,
+        answerTime: latestAnswerTime,
+        isOnline: true // We'll assume players are online for now
+      });
+    }
+
+    const result = {
+      players: progressData,
+      currentQuestion: currentQuestion
+    };
+
+    return res.status(200).json({ message: 'Got game progress successfully', result })
+  } catch (error) {
+    console.error('Error in getGameProgressController:', error);
     return res.status(500).json(error)
   }
 }

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import { authQueries } from '../../utils/query'
 import { hashing } from '../../helper/hashing'
-import {resetPasswordType,resetPasswordSchema} from '../../schema/auth/resetPassword.schema'
+import {resetPasswordType,resetPasswordSchema} from '../../db/schemas/auth/resetPassword.schema'
 
 export const resetPasswordController = async (req: Request<{},{},resetPasswordType>, res: Response) => {
   try {

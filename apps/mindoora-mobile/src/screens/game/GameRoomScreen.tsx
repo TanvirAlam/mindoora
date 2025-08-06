@@ -13,12 +13,14 @@ import {
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import authService from '../../services/auth/authService';
+import gameService from '../../services/gameService';
 import { Colors } from '../../constants/colors';
 import FireworksAnimation from '../../components/FireworksAnimation';
 import RainAnimation from '../../components/RainAnimation';
 import RadialProgressTimer from '../../components/RadialProgressTimer';
 import LeaderboardAnimation from '../../components/LeaderboardAnimation';
 import TrophyDisplay from '../../components/TrophyDisplay';
+import PlayerStatusBar from '../../components/PlayerStatusBar';
 import trophyEvaluator, { EarnedTrophy, GamePerformance } from '../../services/trophyEvaluator';
 
 const { width } = Dimensions.get('window');
@@ -30,6 +32,8 @@ interface GameRoomScreenProps {
     title: string;
     questionCount: number;
     maxQuestions: number;
+    roomId: string;
+    inviteCode?: string; // Add invite code as optional prop
   };
 }
 
@@ -90,6 +94,8 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [showFireworks, setShowFireworks] = useState(false);
   const [showWrongAnimation, setShowWrongAnimation] = useState(false);
+  const [playerStatuses, setPlayerStatuses] = useState<any[]>([]);
+  const [playerId, setPlayerId] = useState<string | null>(null);
 
   // Animation values
   const timerProgress = useRef(new Animated.Value(1)).current;
@@ -98,6 +104,34 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
 
   // Timer ref
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchCurrentPlayer = async () => {
+    try {
+      const currentUser = authService.getCurrentUser();
+      if (!currentUser) return;
+
+      // TODO: Implement proper player ID fetching
+      // For now, we'll skip this to avoid the "Game Room Not Found" error
+      // The invite code needs to be passed from the parent component
+      if (gameData.inviteCode) {
+        console.log('📋 Using invite code:', gameData.inviteCode);
+        const roomDetails = await gameService.getPlayersByInviteCode(gameData.inviteCode);
+        if (roomDetails && roomDetails.players) {
+          const currentPlayer = roomDetails.players.find(
+            player => player.role === 'admin' // Host is always admin
+          );
+          if (currentPlayer) {
+            setPlayerId(currentPlayer.id);
+            console.log('✅ Current player ID found:', currentPlayer.id);
+          }
+        }
+      } else {
+        console.log('⚠️ No invite code available, skipping player ID fetch');
+      }
+    } catch (error) {
+      console.error('Error fetching current player:', error);
+    }
+  };
 
   const fetchGameQuestions = async () => {
     try {
@@ -201,12 +235,13 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
     }
   };
 
-  const handleAnswerSelect = (optionIndex: number) => {
+  const handleAnswerSelect = async (optionIndex: number) => {
     if (gameState.isAnswered || gameState.showFeedback) return;
 
     const currentQuestion = questions[gameState.currentQuestionIndex];
     const isCorrect = optionIndex === currentQuestion.answer;
-    
+    const timeToAnswer = QUESTION_TIME_LIMIT - gameState.timeLeft;
+
     stopTimer();
     
     setGameState(prev => ({
@@ -217,6 +252,18 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
       score: isCorrect ? prev.score + POINTS_PER_CORRECT_ANSWER : prev.score,
       correctAnswers: isCorrect ? prev.correctAnswers + 1 : prev.correctAnswers,
     }));
+
+    // Submit answer to the server (only if we have playerId)
+    if (playerId) {
+      try {
+        await gameService.submitAnswer(gameData.roomId, playerId, currentQuestion.id, optionIndex, timeToAnswer);
+        console.log('✅ Answer submitted successfully');
+      } catch (error) {
+        console.error('Error submitting answer:', error);
+      }
+    } else {
+      console.warn('⚠️  No playerId available, skipping answer submission');
+    }
 
     // Show animations for answers
     if (isCorrect) {
@@ -358,11 +405,31 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
 
   useEffect(() => {
     fetchGameQuestions();
+    fetchCurrentPlayer();
     
     return () => {
       stopTimer();
     };
   }, []);
+
+  useEffect(() => {
+    if (!isGameStarted || gameState.gameFinished || !gameData.roomId) {
+      return;
+    }
+
+    const progressInterval = setInterval(async () => {
+      try {
+        const progress = await gameService.getGameProgress(gameData.roomId);
+        if (progress && progress.players) {
+          setPlayerStatuses(progress.players);
+        }
+      } catch (error) {
+        console.log('Error fetching game progress:', error);
+      }
+    }, 3000); // Poll every 3 seconds for more responsive updates
+
+    return () => clearInterval(progressInterval);
+  }, [isGameStarted, gameState.gameFinished, gameData.roomId]);
 
   if (isLoading) {
     return (
@@ -555,6 +622,23 @@ const GameRoomScreen: React.FC<GameRoomScreenProps> = ({ onBack, gameData }) => 
           <View style={[styles.progressFill, { width: `${progressPercentage}%` }]} />
         </View>
       </View>
+
+      {/* Player Status Bar - Show other players' progress */}
+      {gameData.roomId && playerStatuses.length > 0 && (
+        <PlayerStatusBar 
+          players={playerStatuses.map(player => ({
+            id: player.id,
+            name: player.name,
+            imgUrl: player.imgUrl,
+            isAnswered: player.isAnswered,
+            answerTime: player.answerTime,
+            score: player.score,
+            isOnline: player.isOnline
+          }))}
+          currentUserId={authService.getCurrentUser()?.id || ''}
+          maxTime={QUESTION_TIME_LIMIT}
+        />
+      )}
 
       {/* Timer */}
       <View style={styles.timerContainer}>

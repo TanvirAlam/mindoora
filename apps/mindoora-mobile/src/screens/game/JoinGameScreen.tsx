@@ -26,7 +26,7 @@ interface JoinGameScreenProps {
 }
 
 const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) => {
-  const [gameCode, setGameCode] = useState(['', '', '', '', '', '']);
+  const [gameCode, setGameCode] = useState(['', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
@@ -38,7 +38,7 @@ const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) =
     setGameCode(newCode);
 
     // Auto-focus next input
-    if (value && index < 5) {
+    if (value && index < 3) {
       inputRefs.current[index + 1]?.focus();
     }
   };
@@ -53,27 +53,35 @@ const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) =
   const handleJoinGame = async () => {
     const code = gameCode.join('');
     
-    if (code.length !== 6) {
-      Alert.alert('Invalid Code', 'Please enter a complete 6-digit game code.');
+    if (code.length !== 4) {
+      Alert.alert('Invalid Code', 'Please enter a complete 4-digit game code.');
       return;
     }
 
-    // Get current user info for the player name
     const currentUser = authService.getCurrentUser();
     const playerName = currentUser?.name || 'Anonymous Player';
 
     setIsLoading(true);
     
     try {
-      console.log('🎮 Joining game with code:', code);
-      
+      console.log('🎮 Attempting to join with 4-digit code:', code);
+
+      // First, get room details to find the full invite code
+      const roomDetails = await gameService.getPlayersByInviteCode(code);
+      if (!roomDetails || !roomDetails.room || !roomDetails.room.inviteCode) {
+        throw new Error('Game room not found. Please check your code and try again.');
+      }
+
+      const fullInviteCode = roomDetails.room.inviteCode;
+      console.log('🎮 Found full invite code:', fullInviteCode);
+
       const response = await gameService.joinGame({
-        inviteCode: code,
+        inviteCode: fullInviteCode,
         name: playerName
       });
       
       if (response.success && response.data) {
-        console.log('🎮 Successfully joined game:', response.data);
+        console.log('✅ Successfully joined game:', response.data);
         
         const gameData = {
           gameCode: code,
@@ -89,41 +97,22 @@ const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) =
           Alert.alert(
             'Success! 🎉', 
             `You've joined the game as ${response.data.player.name}!\n\n${response.data.player.isApproved ? 'You can start playing now.' : 'Waiting for host approval...'}`,
-            [
-              { 
-                text: 'OK', 
-                onPress: () => {
-                  // You could navigate to game lobby here
-                  console.log('Navigate to game lobby with:', gameData);
-                }
-              }
-            ]
+            [{ text: 'OK' }]
           );
         }
       } else {
-        Alert.alert('Error', response.message || 'Failed to join game.');
+        throw new Error(response.message || 'Failed to join game.');
       }
     } catch (error) {
-      console.error('🎮 Error joining game:', error);
-      
-      let errorMessage = 'Failed to join game. Please try again.';
-      
-      if (error.message.includes('not found')) {
-        errorMessage = 'Game room not found. Please check your code and try again.';
-      } else if (error.message.includes('full')) {
-        errorMessage = 'This game room is full. Please try another game.';
-      } else if (error.message.includes('connect')) {
-        errorMessage = 'Unable to connect to the server. Please check your internet connection.';
-      }
-      
-      Alert.alert('Unable to Join Game', errorMessage);
+      console.error('❌ Error joining game:', error);
+      Alert.alert('Unable to Join Game', error.message);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleClearCode = () => {
-    setGameCode(['', '', '', '', '', '']);
+    setGameCode(['', '', '', '']);
     inputRefs.current[0]?.focus();
   };
 
@@ -162,7 +151,7 @@ const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) =
             />
           </Text>
           <Text style={styles.title}>Join Game</Text>
-          <Text style={styles.subtitle}>Enter the 6-digit game code to join</Text>
+          <Text style={styles.subtitle}>Enter the 4-digit game code to join</Text>
         </View>
 
         {/* Code Input Section */}
@@ -227,7 +216,7 @@ const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ onBack, onJoinGame }) =
           <View style={styles.infoCard}>
             <Text style={styles.infoTitle}>How to Join</Text>
             <Text style={styles.infoText}>
-              1. Get the 6-digit code from your host{'\n'}
+              1. Get the 4-digit code from your host{'\n'}
               2. Enter the code above{'\n'}
               3. Tap "Join Game" to connect
             </Text>

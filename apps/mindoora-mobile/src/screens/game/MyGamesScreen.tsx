@@ -6,21 +6,23 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ScrollView,
-  ActivityIndicator,
   Alert,
   RefreshControl,
-  Modal,
-  FlatList,
   Animated,
+  Modal,
   TextInput,
+  ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import authService from '../../services/auth/authService';
-import { Colors } from '../../constants/colors';
-import Spinner from '../../components/ui/Spinner';
-import WinnersSection from '../../components/WinnersSection';
 import invitationService from '../../services/invitationService';
+import gameService from '../../services/gameService';
+import { Colors } from '../../constants/colors';
+import WinnersSection from '../../components/WinnersSection';
+import GameLobbyScreen from './GameLobbyScreen';
 import GameRoomScreen from './GameRoomScreen';
+import Spinner from '../../components/ui/Spinner';
 
 interface MyGamesScreenProps {
   onBack: () => void;
@@ -87,6 +89,12 @@ const MyGamesScreen: React.FC<MyGamesScreenProps> = ({ onBack, onNavigateToAddQu
   // Game room state
   const [isGameRoomVisible, setIsGameRoomVisible] = useState(false);
   const [gameToPlay, setGameToPlay] = useState<GameData | null>(null);
+  const [gameRoomId, setGameRoomId] = useState<string | null>(null);
+  
+  // Game lobby state
+  const [isGameLobbyVisible, setIsGameLobbyVisible] = useState(false);
+  const [lobbyGameId, setLobbyGameId] = useState<string | null>(null);
+  const [lobbyInviteCode, setLobbyInviteCode] = useState<string | null>(null);
   
   // Animation for central play button
   const scaleValue = useRef(new Animated.Value(1)).current;
@@ -205,6 +213,47 @@ onPress: () => handleSendCode(game),
     );
   };
 
+  const handleCreateRoom = async (game: GameData) => {
+    if (!game.isReady) {
+      Alert.alert(
+        'Game Not Ready',
+        `This game needs ${game.remainingQuestions} more questions before you can create a room.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    try {
+      console.log('Creating game room for game:', game.id);
+      const gameRoom = await gameService.createGameRoom(game.id);
+
+      if (!gameRoom || !gameRoom.inviteCode) {
+        throw new Error('Failed to create game room or receive an invite code.');
+      }
+      
+      const fullInviteCode = gameRoom.inviteCode.toString();
+      const displayCode = fullInviteCode; // Use the full code directly since it's already 4 digits
+      console.log('✅ Game Room Created. Invite code (display):', displayCode, 'Full code:', fullInviteCode);
+
+      // Add a small delay to ensure database transaction is committed
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Navigate to the game lobby
+      setGameRoomId(gameRoom.roomId);
+      setLobbyGameId(game.id);
+      setLobbyInviteCode(displayCode);
+      setIsGameLobbyVisible(true);
+
+    } catch (error) {
+      console.error('❌ Error creating game room:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to create game room. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   const fetchGameQuestions = async (gameId: string) => {
     try {
       setIsLoadingQuestions(true);
@@ -291,7 +340,7 @@ onPress: () => handleSendCode(game),
   };
 
 const generateGameCode = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return Math.floor(1000 + Math.random() * 9000).toString();
   };
 
   const [gameCode, setGameCode] = useState('');
@@ -594,6 +643,29 @@ const handleSendInvitation = async () => {
     }
   };
 
+  // Show Game Lobby if a game is selected to play
+  if (isGameLobbyVisible && lobbyGameId && lobbyInviteCode) {
+    return (
+      <GameLobbyScreen
+        gameId={lobbyGameId}
+        inviteCode={lobbyInviteCode}
+        isHost={true}
+        onStartGame={() => {
+          setIsGameLobbyVisible(false);
+          // Find the game and include roomId from lobby
+          const gameToStart = games.find(g => g.id === lobbyGameId);
+          if (gameToStart && gameRoomId) {
+            setGameToPlay({ ...gameToStart, roomId: gameRoomId });
+            setIsGameRoomVisible(true);
+          } else {
+            Alert.alert('Error', 'Game room ID not available. Please try again.');
+          }
+        }}
+        onBack={() => setIsGameLobbyVisible(false)}
+      />
+    );
+  }
+
   // Show Game Room if a game is selected to play
   if (isGameRoomVisible && gameToPlay) {
     return (
@@ -603,7 +675,8 @@ const handleSendInvitation = async () => {
           id: gameToPlay.id,
           title: gameToPlay.title,
           questionCount: gameToPlay.questionCount || gameToPlay.questionsCount || 0,
-          maxQuestions: gameToPlay.maxQuestions
+          maxQuestions: gameToPlay.maxQuestions,
+          roomId: gameToPlay.roomId || gameRoomId || ''
         }}
       />
     );
@@ -784,14 +857,20 @@ const handleSendInvitation = async () => {
                     {/* Background Circle */}
                     <View style={styles.radialBackground}>
                       
-                      {/* Top Button - INVITE */}
+                      {/* Top Button - CREATE ROOM (for ready games) or INVITE */}
                       <TouchableOpacity 
-                        style={[styles.radialButton, styles.topButton, styles.inviteButton]} 
-                        onPress={() => handleInviteGame(game)}
+                        style={[
+                          styles.radialButton, 
+                          styles.topButton, 
+                          game.isReady ? styles.createRoomButton : styles.inviteButton
+                        ]} 
+                        onPress={() => game.isReady ? handleCreateRoom(game) : handleInviteGame(game)}
                       >
-                        <Text style={styles.radialButtonIcon}>👥</Text>
-                        {/* Invitation Count Indicator */}
-                        {gameInvitationStatuses[game.id]?.totalSent > 0 && (
+                        <Text style={styles.radialButtonIcon}>
+                          {game.isReady ? '🏠' : '👥'}
+                        </Text>
+                        {/* Invitation Count Indicator (only for invite mode) */}
+                        {!game.isReady && gameInvitationStatuses[game.id]?.totalSent > 0 && (
                           <View style={[
                             styles.invitationStatusIndicator,
                             gameInvitationStatuses[game.id]?.pendingCount > 0 && styles.pendingIndicator,
@@ -899,7 +978,7 @@ const handleSendInvitation = async () => {
                 <Text style={styles.gameCodeText}>{gameCode}</Text>
               </View>
               <Text style={styles.codeInstructions}>
-                Share this 6-digit code with players so they can join your game instantly!
+                Share this 4-digit code with players so they can join your game instantly!
               </Text>
             </View>
 
@@ -1694,6 +1773,11 @@ const styles = StyleSheet.create({
   },
   inviteButtonText: {
     color: '#fff',
+  },
+  
+  // Create Room Button styles
+  createRoomButton: {
+    backgroundColor: '#4CAF50', // Green
   },
   
   // New Buttons Container Layout
