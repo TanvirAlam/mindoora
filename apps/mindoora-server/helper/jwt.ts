@@ -19,7 +19,7 @@ export const jwtToken = ({ id, email, name, role, expireTime }: JwtType): string
       role
     },
     env.jwt_secret,
-    { expiresIn: expireTime }
+    { expiresIn: expireTime as string | number }
   )
 
   return token

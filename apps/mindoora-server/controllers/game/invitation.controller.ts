@@ -12,7 +12,7 @@ import { z } from 'zod';
 const sendInvitationSchema = z.object({
   gameId: z.string().uuid('Invalid game ID format'),
   recipientEmail: z.string().email('Invalid email format'),
-  gameCode: z.string().min(6, 'Game code must be at least 6 characters').max(6, 'Game code must be exactly 6 characters')
+gameCode: z.string().min(4, 'Game code must be at least 4 digits').max(4, 'Game code must be exactly 4 digits')
 });
 
 export const sendGameInvitation = async (req: Request, res: Response) => {

@@ -4,13 +4,15 @@ import {
     deleteGameRoomController,
     getOneGameRoomController,
     updateGameRoomStatusController,
-    getAllGameRoomByStatusController
+    getAllGameRoomByStatusController,
+    startGameController
 } from '../../controllers/game/gameRoom.controller';
 
 
 export const gameRoomRouter: Router = Router()
 
 gameRoomRouter.post('/create', createGameRoomController)
+gameRoomRouter.post('/start', startGameController)
 gameRoomRouter.delete('/delete', deleteGameRoomController)
 gameRoomRouter.put('/update', updateGameRoomStatusController)
 gameRoomRouter.get('/one', getOneGameRoomController)

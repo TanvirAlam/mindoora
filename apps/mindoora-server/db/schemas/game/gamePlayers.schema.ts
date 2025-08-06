@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const createGamePlayersSchema = z.object({
-    inviteCode: z.string().min(6).max(6),
+    inviteCode: z.string().min(4).max(4),
     name: z.string().min(3).max(50)
 })
 export type createGamePlayersType = z.infer<typeof createGamePlayersSchema>
