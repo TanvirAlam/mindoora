@@ -168,16 +168,78 @@ export const startGameController = async (req: Request, res: Response) => {
     if (approvedPlayersCount < 2) {
       return res.status(400).json({ message: 'At least 2 players are required to start the game.' });
     }
-
-    // Update room status to 'started'
-    const gameRoomResult = await pool.query(
-      'UPDATE "GameRooms" SET status = $1 WHERE id = $2 RETURNING *',
-      ['started', roomId]
-    );
-    const gameRoom = gameRoomResult.rows[0]
-
-    req.io.to(gameRoom.id).emit('game_started', {id: gameRoom.id, status: gameRoom.status})
-    return res.status(200).json({ message: 'Game started successfully', result: {gameRoom} })
+    
+    // Begin transaction for atomic operations
+    await pool.query('BEGIN');
+    
+    try {
+      // Update room status to 'started'
+      const gameRoomResult = await pool.query(
+        'UPDATE "GameRooms" SET status = $1 WHERE id = $2 RETURNING *',
+        ['started', roomId]
+      );
+      const gameRoom = gameRoomResult.rows[0];
+      
+      // Create a new game session for tracking
+      // Get all questions for this game
+      const questionsCountResult = await pool.query(
+        'SELECT COUNT(*) as total FROM "Questions" WHERE "gameId" = $1',
+        [gameRoom.gameId]
+      );
+      const totalQuestions = parseInt(questionsCountResult.rows[0].total);
+      
+      // Create new game session
+      const sessionResult = await pool.query(
+        `INSERT INTO "GameSessions" ("roomId", "gameId", "totalQuestions", "totalPlayers", "status", "gameMode")
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [roomId, gameRoom.gameId, totalQuestions, approvedPlayersCount, 'in_progress', 'standard']
+      );
+      const session = sessionResult.rows[0];
+      
+      // Initialize LiveLeaderboard for all players
+      const playersResult = await pool.query(
+        'SELECT * FROM "GamePlayers" WHERE "roomId" = $1 AND "isApproved" = true',
+        [roomId]
+      );
+      const players = playersResult.rows;
+      
+      for (const player of players) {
+        await pool.query(
+          `INSERT INTO "LiveLeaderboard" ("sessionId", "playerId", "playerName")
+           VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+          [session.id, player.id, player.name]
+        );
+        
+        // Initialize PlayerPerformance record
+        await pool.query(
+          `INSERT INTO "PlayerPerformance" ("sessionId", "playerId")
+           VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [session.id, player.id]
+        );
+      }
+      
+      await pool.query('COMMIT');
+      
+      // Emit session created and game started events
+      req.io.to(gameRoom.id).emit('game_started', {
+        id: gameRoom.id, 
+        status: gameRoom.status,
+        sessionId: session.id
+      });
+      
+      return res.status(200).json({
+        message: 'Game started successfully',
+        result: {
+          gameRoom,
+          sessionId: session.id,
+          totalQuestions,
+          totalPlayers: approvedPlayersCount
+        }
+      })
+    } catch (error) {
+      await pool.query('ROLLBACK').catch(() => {});
+      throw error;
+    }
   } catch (error) {
     console.error('Error starting game:', error)
     return res.status(500).json({
@@ -196,15 +258,98 @@ export const updateGameRoomStatusController = async (req: Request<{}, {}, update
     } = req.body
     updateGameRoomStatusSchema.parse(req.body)
     if(await userAccess('gameRooms', {id}, res) === null)return;
-
-    const gameRoomResult = await pool.query(
-      'UPDATE "GameRooms" SET status = $1 WHERE id = $2 RETURNING *',
-      [status, id]
-    )
-    const gameRoom = gameRoomResult.rows[0]
-
-    req.io.to(gameRoom.id).emit('game_status', {id: gameRoom.id, status: gameRoom.status})
-    return res.status(201).json({ message: `Game Room Status Updated successfully`, result: {gameRoom} })
+    
+    // Begin transaction for atomic operations
+    await pool.query('BEGIN');
+    
+    try {
+      const gameRoomResult = await pool.query(
+        'UPDATE "GameRooms" SET status = $1 WHERE id = $2 RETURNING *',
+        [status, id]
+      )
+      const gameRoom = gameRoomResult.rows[0]
+      
+      // If game is finished, update session status and calculate winners
+      if (status === 'finished') {
+        // Find the active session for this room
+        const sessionResult = await pool.query(
+          `SELECT * FROM "GameSessions" WHERE "roomId" = $1 AND status IN ('waiting', 'in_progress') 
+           ORDER BY "sessionStartedAt" DESC LIMIT 1`,
+          [id]
+        );
+        
+        if (sessionResult.rows.length > 0) {
+          const session = sessionResult.rows[0];
+          
+          // Update session status to completed
+          await pool.query(
+            `UPDATE "GameSessions" SET status = 'completed', "sessionEndedAt" = NOW() WHERE id = $1`,
+            [session.id]
+          );
+          
+          // Calculate final rankings and update userGameScore
+          const leaderboardResult = await pool.query(
+            `SELECT ll.*, pp."averageReactionTime", pp."fastestCorrectAnswer"
+             FROM "LiveLeaderboard" ll
+             LEFT JOIN "PlayerPerformance" pp ON pp."sessionId" = ll."sessionId" AND pp."playerId" = ll."playerId"
+             WHERE ll."sessionId" = $1
+             ORDER BY ll."currentRank" ASC`,
+            [session.id]
+          );
+          
+          // Update userGameScore with final results
+          for (const player of leaderboardResult.rows) {
+            await pool.query(
+              `INSERT INTO "userGameScore" ("gameId", "playerId", score, "sessionId", "finalRank", "completionPercentage")
+               VALUES ($1, $2, $3, $4, $5, $6)
+               ON CONFLICT ("gameId", "playerId") DO UPDATE SET
+               score = EXCLUDED.score, "sessionId" = EXCLUDED."sessionId", "finalRank" = EXCLUDED."finalRank",
+               "completionPercentage" = EXCLUDED."completionPercentage"`,
+              [gameRoom.gameId, player.playerId, player.currentPoints, session.id, player.currentRank, 
+               (player.questionsAnswered / session.totalQuestions) * 100]
+            );
+          }
+          
+          // Update GameWinners table if we have at least one player
+          if (leaderboardResult.rows.length > 0) {
+            // Get top 3 players (if available)
+            const first = leaderboardResult.rows.find(p => p.currentRank === 1);
+            const second = leaderboardResult.rows.find(p => p.currentRank === 2);
+            const third = leaderboardResult.rows.find(p => p.currentRank === 3);
+            
+            // Insert or update GameWinners
+            await pool.query(
+              `INSERT INTO "GameWinners" ("gameId", "firstPlacePlayerId", "secondPlacePlayerId", "thirdPlacePlayerId",
+               "firstPlacePoints", "secondPlacePoints", "thirdPlacePoints")
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               ON CONFLICT ("gameId") DO UPDATE SET
+               "firstPlacePlayerId" = EXCLUDED."firstPlacePlayerId",
+               "secondPlacePlayerId" = EXCLUDED."secondPlacePlayerId",
+               "thirdPlacePlayerId" = EXCLUDED."thirdPlacePlayerId",
+               "firstPlacePoints" = EXCLUDED."firstPlacePoints",
+               "secondPlacePoints" = EXCLUDED."secondPlacePoints",
+               "thirdPlacePoints" = EXCLUDED."thirdPlacePoints",
+               "updatedAt" = NOW()`,
+              [gameRoom.gameId, 
+               first?.playerId || null, 
+               second?.playerId || null, 
+               third?.playerId || null,
+               first?.currentPoints || 0,
+               second?.currentPoints || 0,
+               third?.currentPoints || 0]
+            );
+          }
+        }
+      }
+      
+      await pool.query('COMMIT');
+      
+      req.io.to(gameRoom.id).emit('game_status', {id: gameRoom.id, status: gameRoom.status})
+      return res.status(201).json({ message: `Game Room Status Updated successfully`, result: {gameRoom} })
+    } catch (error) {
+      await pool.query('ROLLBACK').catch(() => {});
+      return res.status(500).json(error)
+    }
   } catch (error) {
     return res.status(500).json(error)
   }
