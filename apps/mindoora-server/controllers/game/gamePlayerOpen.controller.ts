@@ -199,7 +199,55 @@ export const getResultOfARoomController = async (req: Request, res: Response) =>
     if(!isLiveRoom){
       return res.status(404).json({ message: 'Game Room Not Found' })
     }
-
+    
+    // Check if we have a completed session with enhanced data
+    const sessionResult = await pool.query(
+      `SELECT * FROM "GameSessions" WHERE "roomId" = $1 AND status = 'completed' 
+       ORDER BY "sessionEndedAt" DESC LIMIT 1`,
+      [roomId]
+    );
+    
+    // Use enhanced detailed results if available
+    if (sessionResult.rows.length > 0) {
+      const session = sessionResult.rows[0];
+      
+      // Get detailed results from GameResultsDetailed view
+      const detailedResult = await pool.query(
+        `SELECT * FROM "GameResultsDetailed" WHERE "sessionId" = $1 ORDER BY "finalRank" ASC`,
+        [session.id]
+      );
+      
+      if (detailedResult.rows.length > 0) {
+        // Transform to expected format
+        const formattedResult = detailedResult.rows.map(player => ({
+          playerName: player.playerName,
+          image: player.playerImage,
+          nQuestionSolved: player.questionsAnswered,
+          rightAnswered: player.correctAnswers,
+          points: player.finalScore,
+          accuracyPercentage: player.accuracyPercentage,
+          rank: player.finalRank,
+          // Add additional enhanced metrics
+          wasFirst: player.wasFirstCorrect, // How many times player was first to answer correctly
+          fastestTime: player.fastestReactionTime // Player's fastest reaction time
+        }));
+        
+        return res.status(200).json({
+          message: 'Got Enhanced Result of a game room successfully',
+          result: formattedResult,
+          session: {
+            id: session.id,
+            totalQuestions: session.totalQuestions,
+            totalPlayers: session.totalPlayers,
+            startedAt: session.sessionStartedAt,
+            endedAt: session.sessionEndedAt,
+            gameId: session.gameId
+          }
+        });
+      }
+    }
+    
+    // Fallback to original logic if no enhanced data is available
     // Get all approved players in the room
     const playersResult = await pool.query(
       'SELECT * FROM "GamePlayers" WHERE "roomId" = $1 AND "isApproved" = true',
@@ -212,7 +260,7 @@ export const getResultOfARoomController = async (req: Request, res: Response) =>
     for (const player of players) {
       // Get questions solved by this player
       const questionSolvedResult = await pool.query(
-        'SELECT * FROM "QuestionsSolved" WHERE "playerId" = $1',
+        'SELECT * FROM "questionsSolved" WHERE "playerId" = $1',
         [player.id]
       )
       const questionSolved = questionSolvedResult.rows
@@ -254,7 +302,78 @@ export const getGameProgressController = async (req: Request, res: Response) => 
     if(!isLiveRoom){
       return res.status(404).json({ message: 'Game Room Not Found or Not Active' })
     }
+    
+    // Try to get enhanced leaderboard data if available
+    const sessionResult = await pool.query(
+      `SELECT * FROM "GameSessions" WHERE "roomId" = $1 AND status IN ('waiting', 'in_progress') 
+       ORDER BY "sessionStartedAt" DESC LIMIT 1`,
+      [roomId]
+    );
+    
+    if (sessionResult.rows.length > 0) {
+      const session = sessionResult.rows[0];
+      
+      // Get live leaderboard data
+      const leaderboardResult = await pool.query(
+        `SELECT ll.*, pp."averageReactionTime", pp."fastestCorrectAnswer", pp."streak" as "currentStreak"
+         FROM "LiveLeaderboard" ll
+         LEFT JOIN "PlayerPerformance" pp ON pp."sessionId" = ll."sessionId" AND pp."playerId" = ll."playerId"
+         WHERE ll."sessionId" = $1
+         ORDER BY ll."currentRank" ASC`,
+        [session.id]
+      );
+      
+      if (leaderboardResult.rows.length > 0) {
+        // Get player details
+        const playerIds = leaderboardResult.rows.map(p => p.playerId);
+        const playersResult = await pool.query(
+          `SELECT * FROM "GamePlayers" WHERE id = ANY($1::uuid[])`,
+          [playerIds]
+        );
+        const playersMap = playersResult.rows.reduce((map, player) => {
+          map[player.id] = player;
+          return map;
+        }, {});
+        
+        // Format enhanced progress data
+        const enhancedProgressData = leaderboardResult.rows.map(player => ({
+          id: player.playerId,
+          name: player.playerName,
+          imgUrl: playersMap[player.playerId]?.imgUrl,
+          currentQuestion: player.questionsAnswered,
+          score: player.currentPoints,
+          rank: player.currentRank,
+          correctAnswers: player.correctAnswers,
+          currentStreak: player.currentStreak || 0,
+          averageReactionTime: player.averageReactionTime,
+          fastestTime: player.fastestCorrectAnswer,
+          isAnswered: player.questionsAnswered > 0,
+          isOnline: true
+        }));
+        
+        // Find max question number
+        let maxQuestion = 0;
+        enhancedProgressData.forEach(player => {
+          if (player.currentQuestion > maxQuestion) {
+            maxQuestion = player.currentQuestion;
+          }
+        });
+        
+        return res.status(200).json({
+          message: 'Got enhanced game progress successfully',
+          result: {
+            players: enhancedProgressData,
+            currentQuestion: maxQuestion,
+            sessionId: session.id,
+            totalQuestions: session.totalQuestions,
+            totalPlayers: session.totalPlayers,
+            leaderboard: true
+          }
+        });
+      }
+    }
 
+    // Fall back to original logic if enhanced data not available
     // Get all approved players in the room
     const playersResult = await pool.query(
       'SELECT * FROM "GamePlayers" WHERE "roomId" = $1 AND "isApproved" = true ORDER BY "createdAt" ASC',
@@ -296,7 +415,8 @@ export const getGameProgressController = async (req: Request, res: Response) => 
 
     const result = {
       players: progressData,
-      currentQuestion: currentQuestion
+      currentQuestion: currentQuestion,
+      leaderboard: false
     };
 
     return res.status(200).json({ message: 'Got game progress successfully', result })

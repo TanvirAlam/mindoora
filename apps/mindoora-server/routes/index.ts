@@ -29,6 +29,7 @@ import gameCreationRouter from './gameCreation.routes';
 import gameWinnersRouter from './game/gameWinners.router';
 import { userTrophiesRouter } from './userTrophies.router';
 import invitationRouter from './game/invitation.router';
+import enhancedGameAnalyticsRouter from './game/enhancedGameAnalytics.router';
 
 export const router: Router = Router()
 
@@ -67,3 +68,4 @@ router.use('/api/games', gameCreationRouter)
 router.use('/api/v1/game/winners', gameWinnersRouter)
 router.use('/api/v1/trophies', userTrophiesRouter)
 router.use('/api/invitations', invitationRouter)
+router.use('/api/v1/game/analytics', enhancedGameAnalyticsRouter)

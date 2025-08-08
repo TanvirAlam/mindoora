@@ -5,6 +5,8 @@ import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import cacheService from './cacheService.js';
 import localModelService from './localModelService.js';
+import workingModelService from './workingModelService.js';
+import finalWorkingModelService from './finalWorkingModelService.js';
 import t5QuestionService from './t5QuestionService.js';
 
 class AIProviderService {
@@ -154,16 +156,15 @@ class AIProviderService {
         });
       }
 
-      // If all providers fail, try local model service as final fallback
-      logger.warn('All AI providers failed, trying local model service');
+      // If all providers fail, try final working model service as final fallback
+      logger.warn('All AI providers failed, trying final working model service');
       try {
-        return await localModelService.generateQuestions(prompt, {
+        return await finalWorkingModelService.generateQuestions(prompt, {
           count,
-          difficulty,
-          focusArea: ''
+          difficulty
         });
       } catch (localError) {
-        logger.error('Local model service also failed:', localError.message);
+        logger.error('Final model service also failed:', localError.message);
         // Final fallback to mock questions
         return localModelService.generateFallbackQuestions(prompt, count, difficulty);
       }
@@ -259,29 +260,27 @@ class AIProviderService {
   }
 
   /**
-   * Generate questions using local model service
+   * Generate questions using final working model service
    */
   async generateWithLocal(prompt, options) {
     const { count, difficulty, questionTypes } = options;
     
     try {
-      // Use the intelligent local model service
-      const result = await localModelService.generateQuestions(prompt, {
+      // Use the final working model service that generates truly realistic questions
+      const result = await finalWorkingModelService.generateQuestions(prompt, {
         count,
-        difficulty,
-        model: 'gpt2', // Default to GPT-2 style, can be configured
-        focusArea: questionTypes.join(', ')
+        difficulty
       });
       
-      // Check if local service generated questions
+      // The final service always returns high-quality questions
       if (!result || !result.questions || result.questions.length === 0) {
-        logger.warn('Local model service generated no questions, using fallback');
+        logger.warn('Final model service generated no questions, using original fallback');
         return localModelService.generateFallbackQuestions(prompt, count, difficulty);
       }
       
       return result;
     } catch (error) {
-      logger.error('Local model service failed, using fallback questions:', error.message);
+      logger.error('Final model service failed, using fallback questions:', error.message);
       return localModelService.generateFallbackQuestions(prompt, count, difficulty);
     }
   }

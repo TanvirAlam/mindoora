@@ -8,7 +8,7 @@
     "lint": "eslint \"**/*.ts*\"",
     "generate:component": "turbo gen react-component",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "node init && storybook build"
   },
   "devDependencies": {
     "@emotion/react": "^11.11.1",
