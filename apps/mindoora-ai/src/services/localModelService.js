@@ -27,15 +27,39 @@ const LOCAL_MODELS = {
   'flan-t5-small': {
     name: 'flan-t5-small',
     path: 'flan-t5-small',
-    description: 'Instruction-tuned T5 model, good for Q&A tasks',
+    description: 'Instruction-tuned T5 model, excellent for Q&A tasks and structured questions',
     size: '~300MB',
     type: 'text2text-generation',
+    available: false
+  },
+  'xenova-t5-small': {
+    name: 'xenova-t5-small',
+    path: 'xenova-t5-small', 
+    description: 'Xenova T5-small model, optimized for text-to-text generation',
+    size: '~300MB',
+    type: 'text2text-generation',
+    available: false
+  },
+  'xenova-gpt2': {
+    name: 'xenova-gpt2',
+    path: 'xenova-gpt2',
+    description: 'Xenova GPT-2 model, good for creative text generation',
+    size: '~500MB', 
+    type: 'text-generation',
+    available: false
+  },
+  'xenova-distilgpt2': {
+    name: 'xenova-distilgpt2',
+    path: 'xenova-distilgpt2',
+    description: 'Xenova DistilGPT-2, smaller and faster version',
+    size: '~350MB',
+    type: 'text-generation', 
     available: false
   }
 };
 
 // Fallback order for models when one fails (best for Q&A first)
-const MODEL_FALLBACK_ORDER = ['flan-t5-small', 'gpt2', 'distilgpt2'];
+const MODEL_FALLBACK_ORDER = ['flan-t5-small', 'xenova-t5-small', 'xenova-gpt2', 'xenova-distilgpt2', 'gpt2', 'distilgpt2'];
 
 class LocalModelService {
   constructor() {
