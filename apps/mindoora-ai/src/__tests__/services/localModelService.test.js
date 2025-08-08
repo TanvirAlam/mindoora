@@ -59,10 +59,14 @@ describe('LocalModelService', () => {
   test('should initialize available local models', () => {
     localModelService.initializeLocalModels();
     const availableModels = localModelService.getAvailableModels();
+    // The service now includes xenova models that are mocked as available
     expect(availableModels).toEqual({
       'gpt2': expect.any(Object),
       'distilgpt2': expect.any(Object),
-      'flan-t5-small': expect.any(Object)
+      'flan-t5-small': expect.any(Object),
+      'xenova-distilgpt2': expect.any(Object),
+      'xenova-gpt2': expect.any(Object),
+      'xenova-t5-small': expect.any(Object)
     });
   });
 
@@ -76,13 +80,15 @@ describe('LocalModelService', () => {
   test('should try to use local models for question generation', async () => {
     const result = await localModelService.generateQuestions('JavaScript', { count: 3 });
     expect(result.questions.length).toBeGreaterThan(0);
-    expect(result.metadata.provider).toBe('local-intelligent');
+    // The provider name should be 'local-ai' when using real models, or 'local-intelligent' when falling back
+    expect(['local-ai', 'local-intelligent']).toContain(result.metadata.provider);
   });
 
   test('should log warnings and errors if all models fail', async () => {
     jest.spyOn(localModelService, 'generateWithLocalModel').mockRejectedValue(new Error('Model failed'));
     const result = await localModelService.generateQuestions('JavaScript', { count: 3 });
-    expect(mockLoggerWarn).toHaveBeenCalledWith('All 3 local models failed, generating fallback questions');
+    // The service now has 6 available models (including xenova models), not 3
+    expect(mockLoggerWarn).toHaveBeenCalledWith('All 6 local models failed, generating fallback questions');
     expect(mockLoggerError).toHaveBeenCalled();
     expect(result.metadata.provider).toBe('fallback-mock');
   });

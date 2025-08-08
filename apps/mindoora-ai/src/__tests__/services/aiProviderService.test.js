@@ -77,6 +77,13 @@ jest.unstable_mockModule('../../services/t5QuestionService.js', () => ({
   }
 }));
 
+// Mock finalWorkingModelService to prevent API calls and fall through to localModelService.generateFallbackQuestions
+jest.unstable_mockModule('../../services/finalWorkingModelService.js', () => ({
+  default: {
+    generateQuestions: jest.fn().mockRejectedValue(new Error('Final working model service failed'))
+  }
+}));
+
 // Import after mocking
 const aiProviderService = (await import('../../services/aiProviderService.js')).default;
 
@@ -122,12 +129,14 @@ describe('AIProviderService', () => {
 
     it('should handle provider errors and fall back to local service', async () => {
       // Since we configured no API keys, it should fall back to local service
+      // The aiProviderService will try finalWorkingModelService first, then localModelService.generateFallbackQuestions
       const result = await aiProviderService.generateQuestions('test prompt');
 
       expect(result).toBeDefined();
       expect(result.questions).toBeDefined();
       expect(Array.isArray(result.questions)).toBe(true);
-      expect(mockLocalModelService.generateQuestions).toHaveBeenCalled();
+      // The service falls back to generateFallbackQuestions, not generateQuestions
+      expect(mockLocalModelService.generateFallbackQuestions).toHaveBeenCalled();
     });
 
     it('should validate question count limits', async () => {
